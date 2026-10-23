@@ -30,7 +30,7 @@ function applyStemi(m, { territory, stage = 'acute', severity = 0.3 }) {
     qLoss(m, u, 0.4);
   } else if (stage === 'old') {
     m.t = add(m.t, scale(dir, -severity * 0.8));
-    qLoss(m, u, 0.5);
+    qLoss(m, u, 1.2);
   }
 }
 
@@ -88,17 +88,22 @@ export const PVC_MORPHS = {
 const FINDINGS = {
   lbbb(m) {
     Object.assign(m, structuredClone(ESCAPE_MORPHS.ventricular));
+    // PTB-XL left bundle branch blocks: very deep S in V1 to V3, discordant ST and upright T there
+    m.qrs = 0.135;
+    m.r = [1.3, 0.35, -2.5];
+    m.st = [-0.12, -0.02, 0.45];
+    m.t = [-0.45, -0.15, 0.6];
   },
   rbbb(m) {
     m.qrs = 0.13;
-    m.late = [-0.6, 0.0, 1.0];
-    m.s = [-0.5, -0.15, -0.1];
+    m.late = [-0.35, 0.0, 0.85];
+    m.s = [-0.25, -0.1, -0.05];
     m.t = [-0.05, 0.25, -0.35];
   },
   lahb(m) {
     m.q = [-0.1, 0.22, 0.1];
-    m.r = [0.85, -0.8, -0.3];
-    m.s = [-0.1, -0.1, -0.2];
+    m.r = [0.85, -0.8, 0.1];
+    m.s = [-0.4, -0.3, -0.5];
     m.t = [0.18, -0.05, 0.0];
   },
   lvh(m, o) {
