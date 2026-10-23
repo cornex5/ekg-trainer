@@ -1,17 +1,34 @@
 import { generate } from './src/engine.js';
 import { paperSvg } from './src/render.js';
-import { SCENARIOS } from './src/scenarios.js';
+import { SCENARIOS, CATEGORIES } from './src/scenarios.js';
 import { measure, NORMAL_RANGES } from './src/measure.js';
 
 const $ = (id) => document.getElementById(id);
 const state = { sc: SCENARIOS[0], seedOffset: 0, noise: 'low', mode: 'paper', sig: null };
 
-for (const s of SCENARIOS) {
-  const o = document.createElement('option');
-  o.value = s.id;
-  o.textContent = s.title;
-  $('scenario').appendChild(o);
+const LEVELS = ['rs', 'notsan', 'arzt', 'experte'];
+
+function fillScenarios() {
+  const max = LEVELS.indexOf($('level').value);
+  const sel = $('scenario');
+  sel.innerHTML = '';
+  CATEGORIES.forEach((cat, ci) => {
+    const list = SCENARIOS.filter((s) => s.cat === ci && LEVELS.indexOf(s.level) <= max);
+    if (!list.length) return;
+    const g = document.createElement('optgroup');
+    g.label = cat;
+    for (const s of list) {
+      const o = document.createElement('option');
+      o.value = s.id;
+      o.textContent = s.title;
+      g.appendChild(o);
+    }
+    sel.appendChild(g);
+  });
+  if (![...sel.options].some((o) => o.value === state.sc.id)) state.sc = SCENARIOS.find((s) => s.id === sel.options[0].value);
+  sel.value = state.sc.id;
 }
+fillScenarios();
 
 function mm(v) {
   return (v * 10).toFixed(1);
@@ -30,7 +47,7 @@ function run() {
   $('paper').innerHTML = paperSvg(state.sig);
 
   const normal = state.sc.id === 'sinus';
-  $('kv').innerHTML = `<span>Frequenz <b>${m.hr ?? '-'}</b>/min</span><span>QRS-Breite <b>${m.qrsMs}</b> ms</span><span>Lagetyp (QRS-Achse) <b>${normal ? fmt(m.axis, ...NORMAL_RANGES.axis) : m.axis}</b>&deg;</span>`;
+  $('kv').innerHTML = `<span>Frequenz <b>${m.hr ?? '-'}</b>/min</span>${m.hr === null ? '' : `<span>QRS-Breite <b>${m.qrsMs}</b> ms</span>`}<span>Lagetyp (QRS-Achse) <b>${normal ? fmt(m.axis, ...NORMAL_RANGES.axis) : m.axis}</b>&deg;</span>`;
 
   let rows = '<tr><th>Ableitung</th><th>R (mm)</th><th>S (mm)</th><th>ST +60 ms (mm)</th><th>T (mm)</th></tr>';
   for (const l of m.perLead) {
@@ -109,6 +126,14 @@ function setMode(mode) {
   startMonitor();
 }
 
+$('level').addEventListener('change', () => {
+  const before = state.sc.id;
+  fillScenarios();
+  if (state.sc.id !== before) {
+    state.seedOffset = 0;
+    run();
+  }
+});
 $('scenario').addEventListener('change', (e) => {
   state.sc = SCENARIOS.find((s) => s.id === e.target.value);
   state.seedOffset = 0;

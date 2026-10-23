@@ -4,7 +4,7 @@ import { LEAD_NAMES } from './leads.js';
 // check panel tests what the picture actually shows.
 export function measure(sig) {
   const fs = sig.fs;
-  const beats = sig.sched.ventricular.filter((b) => b.t > 1 && b.t + 0.6 < sig.duration);
+  const beats = sig.sched.ventricular.filter((b) => !b.morph && b.t > 1 && b.t + 0.6 < sig.duration);
   const D = sig.morph.qrs;
   const rrs = [];
   const all = sig.sched.ventricular;

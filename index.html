@@ -71,6 +71,14 @@ ul.sol { margin: 0; padding-left: 18px; }
   <p class="sub">Alle Kurven werden live aus einem Reizleitungs- und Herzvektor-Modell erzeugt, nichts davon ist eine gespeicherte Aufnahme.</p>
 
   <div class="bar">
+    <label>Niveau
+      <select id="level">
+        <option value="rs">Rettungssanitäter</option>
+        <option value="notsan">Notfallsanitäter</option>
+        <option value="arzt">Arzt</option>
+        <option value="experte" selected>Kardiologie / Experte</option>
+      </select>
+    </label>
     <label>Fall
       <select id="scenario"></select>
     </label>
