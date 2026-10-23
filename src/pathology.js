@@ -1,4 +1,5 @@
 import { NORMAL_MORPH } from './model.js';
+import { mulberry32, gaussian } from './rng.js';
 
 // ST vector direction per infarct territory. The reciprocal changes in the opposite leads
 // come out of the projection by themselves, nothing is drawn per lead by hand.
@@ -166,6 +167,25 @@ const FINDINGS = {
   },
 };
 
+// Real hearts differ in size, position and chest wall. Spreads are taken from the width of
+// the normal ECGs in PTB-XL (axis sd about 25 degrees, QRS amplitude sd about 0.3 in log terms).
+// Findings that define the axis (hemiblock, bundle branch blocks) get amplitude spread only.
+function individual(m, sc, fixedAxis) {
+  const rng = mulberry32((sc.seed ?? 1) * 7919 + 13);
+  const g = () => gaussian(rng);
+  const kq = Math.exp((fixedAxis ? 0.15 : 0.28) * g());
+  const kz = Math.exp((fixedAxis ? 0.12 : 0.25) * g());
+  const kt = Math.exp(0.25 * g());
+  const th = fixedAxis ? 0 : ((24 * g()) * Math.PI) / 180;
+  const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a), v[2]];
+  for (const k of ['q', 'r', 's']) {
+    const v = rot(m[k], th);
+    m[k] = [v[0] * kq, v[1] * kq, v[2] * kq * kz];
+  }
+  const tv = rot(m.t, th * 0.5);
+  m.t = [tv[0] * kt, tv[1] * kt, tv[2] * kt];
+}
+
 export function morphFor(sc) {
   const m = structuredClone(NORMAL_MORPH);
   if (sc.escape) Object.assign(m, structuredClone(ESCAPE_MORPHS[sc.escape]));
@@ -174,6 +194,11 @@ export function morphFor(sc) {
     FINDINGS[id](m, opts);
   }
   if (sc.stemi) applyStemi(m, sc.stemi);
+  if (sc.indiv !== false) {
+    const ids = (sc.findings ?? []).map((f) => (Array.isArray(f) ? f[0] : f));
+    const fixed = !!sc.escape || ids.some((i) => ['lahb', 'lbbb', 'rbbb', 'wpw', 'brugada'].includes(i));
+    individual(m, sc, fixed);
+  }
   if (sc.qtc && !sc.findings?.some((f) => (Array.isArray(f) ? f[0] : f) === 'longqt')) m.qtc = sc.qtc;
   return m;
 }

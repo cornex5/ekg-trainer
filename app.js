@@ -5,6 +5,7 @@ import { measure, NORMAL_RANGES } from './src/measure.js';
 import { mulberry32 } from './src/rng.js';
 import { RHYTHMS, AXES, FINDINGS, TRUTH } from './src/truth.js';
 import { grade } from './src/grade.js';
+import { makeBlindSet } from './src/blind.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
 
 const $ = (id) => document.getElementById(id);
@@ -196,6 +197,50 @@ function quizAnswer(id) {
   renderStats();
 }
 
+// ---------- Blindtest ----------
+const blind = { items: [], i: 0, hits: 0, answered: false, log: [] };
+function blindStart() {
+  blind.items = makeBlindSet(20);
+  blind.i = 0;
+  blind.hits = 0;
+  blind.log = [];
+  blindShow();
+}
+function blindShow() {
+  const it = blind.items[blind.i];
+  state.sig = it.make();
+  blind.answered = false;
+  $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value) });
+  $('blindFb').classList.add('hidden');
+  $('btnBlindNext').classList.add('hidden');
+  $('btnBlindReal').disabled = false;
+  $('btnBlindSim').disabled = false;
+  $('blindHint').textContent = `EKG ${blind.i + 1} von ${blind.items.length}`;
+}
+function blindAnswer(guessReal) {
+  if (blind.answered) return;
+  blind.answered = true;
+  const it = blind.items[blind.i];
+  const ok = guessReal === it.real;
+  if (ok) blind.hits += 1;
+  blind.log.push({ real: it.real, guess: guessReal });
+  $('btnBlindReal').disabled = true;
+  $('btnBlindSim').disabled = true;
+  const last = blind.i + 1 >= blind.items.length;
+  let txt = `<strong class="${ok ? 'ok' : 'bad'}">${ok ? 'Richtig.' : 'Daneben.'}</strong> Das war ${it.real ? 'eine echte Aufnahme' : 'eine Simulation'}.`;
+  if (last) {
+    const pct = Math.round((blind.hits / blind.items.length) * 100);
+    const realHit = blind.log.filter((l) => l.real && l.guess).length;
+    const simHit = blind.log.filter((l) => !l.real && !l.guess).length;
+    const nReal = blind.log.filter((l) => l.real).length;
+    const nSim = blind.log.length - nReal;
+    txt += `<div class="score">${pct} %</div><div class="small">Echte erkannt: ${realHit} von ${nReal}. Simulierte erkannt: ${simHit} von ${nSim}. Bei 20 Bildern liegt reines Raten mit 95 Prozent Wahrscheinlichkeit zwischen 30 und 70 Prozent.</div>`;
+  }
+  $('blindFb').innerHTML = txt;
+  $('blindFb').classList.remove('hidden');
+  if (!last) $('btnBlindNext').classList.remove('hidden');
+}
+
 // ---------- Katalog ----------
 function runCatalog() {
   build();
@@ -272,6 +317,7 @@ function startMonitor() {
 }
 
 function setMode(mode) {
+  if (state.tab === 'blind') mode = 'paper';
   state.mode = mode;
   $('paper').classList.toggle('hidden', mode !== 'paper');
   $('monitor').classList.toggle('hidden', mode !== 'monitor');
@@ -288,14 +334,17 @@ function renderStats() {
 
 function setTab(tab) {
   state.tab = tab;
-  for (const [id, t] of [['tabRead', 'read'], ['tabQuiz', 'quiz'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
+  for (const [id, t] of [['tabRead', 'read'], ['tabQuiz', 'quiz'], ['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
   $('panelRead').classList.toggle('hidden', tab !== 'read');
   $('panelQuiz').classList.toggle('hidden', tab !== 'quiz');
+  $('panelBlind').classList.toggle('hidden', tab !== 'blind');
   $('panelCat').classList.toggle('hidden', tab !== 'cat');
   for (const id of ['scenWrap', 'reseed', 'solToggle']) $(id).classList.toggle('hidden', tab !== 'cat');
   $('cat').parentElement.classList.toggle('hidden', tab === 'cat');
+  if (tab === 'blind') setMode('paper');
   if (tab === 'read') readCase();
   else if (tab === 'quiz') quizQuestion();
+  else if (tab === 'blind') blindStart();
   else {
     fillScenarios();
     runCatalog();
@@ -305,7 +354,15 @@ function setTab(tab) {
 // ---------- events ----------
 $('tabRead').addEventListener('click', () => setTab('read'));
 $('tabQuiz').addEventListener('click', () => setTab('quiz'));
+$('tabBlind').addEventListener('click', () => setTab('blind'));
 $('tabCat').addEventListener('click', () => setTab('cat'));
+$('btnBlindReal').addEventListener('click', () => blindAnswer(true));
+$('btnBlindSim').addEventListener('click', () => blindAnswer(false));
+$('btnBlindNext').addEventListener('click', () => {
+  blind.i += 1;
+  blindShow();
+});
+$('btnBlindStart').addEventListener('click', blindStart);
 $('btnGrade').addEventListener('click', doGrade);
 $('btnNext').addEventListener('click', readCase);
 $('btnQNext').addEventListener('click', quizQuestion);
@@ -320,13 +377,17 @@ $('btnBlitz').addEventListener('click', () => {
 });
 $('level').addEventListener('change', () => setTab(state.tab));
 $('cat').addEventListener('change', () => setTab(state.tab));
+function refresh() {
+  if (state.tab === 'blind') $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value) });
+  else if (state.tab === 'cat') runCatalog();
+  else build();
+}
 $('noise').addEventListener('change', (e) => {
   state.noise = e.target.value;
-  if (state.tab === 'cat') runCatalog();
-  else build();
+  refresh();
 });
-$('speed').addEventListener('change', () => (state.tab === 'cat' ? runCatalog() : build()));
-$('gain').addEventListener('change', () => (state.tab === 'cat' ? runCatalog() : build()));
+$('speed').addEventListener('change', refresh);
+$('gain').addEventListener('change', refresh);
 $('scenario').addEventListener('change', (e) => {
   state.sc = SCENARIOS.find((s) => s.id === e.target.value);
   state.seedOffset = 0;

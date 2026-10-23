@@ -99,6 +99,7 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
   <div class="tabs">
     <button id="tabRead" aria-pressed="true">Befunden</button>
     <button id="tabQuiz" aria-pressed="false">Quiz</button>
+    <button id="tabBlind" aria-pressed="false">Blindtest</button>
     <button id="tabCat" aria-pressed="false">Katalog und Realismus-Check</button>
   </div>
   <div class="statline" id="statline"></div>
@@ -187,6 +188,19 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
       <button id="btnBlitz" aria-pressed="false">Blitz: 10 Fälle</button>
       <span class="small" id="quizHint"></span>
     </div>
+  </div>
+
+  <div id="panelBlind" class="card hidden" style="margin-top:14px">
+    <h2 id="blindHead">Blindtest: echt oder simuliert?</h2>
+    <p class="small" id="blindIntro">Zehn echte normale EKGs aus der offenen Datenbank PTB-XL und zehn simulierte, gemischt. Beide sind gleich gerendert und gleich abgetastet. Entscheide bei jedem, ob es eine echte Aufnahme ist. Liegt Deine Trefferquote nahe 50 Prozent, ist die Simulation nicht von echt zu unterscheiden.</p>
+    <div class="actions">
+      <button id="btnBlindReal" class="primary">Echt</button>
+      <button id="btnBlindSim">Simuliert</button>
+      <button id="btnBlindNext" class="hidden">Weiter</button>
+      <button id="btnBlindStart">Neu starten</button>
+      <span class="small" id="blindHint"></span>
+    </div>
+    <div id="blindFb" class="hidden" style="margin-top:10px"></div>
   </div>
 
   <div id="panelCat" class="grid hidden">
