@@ -62,25 +62,58 @@ th { color: var(--muted); font-weight: 500; }
 .kv b { font-weight: 500; color: var(--accent); }
 .note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
 ul.sol { margin: 0; padding-left: 18px; }
-.hidden { display: none; }
+.hidden { display: none !important; }
+.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.statline { color: var(--muted); font: 13px var(--mono); margin-bottom: 12px; }
+.form { display: grid; gap: 12px; }
+.form .row { display: flex; flex-wrap: wrap; gap: 12px; }
+.form select, .form input[type=number] { min-width: 0; width: 100%; }
+.form input[type=number] { padding: 6px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); font: inherit; }
+.form .col { flex: 1 1 200px; min-width: 0; }
+fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; margin: 0; min-width: 0; }
+legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 14px; }
+.checks label { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--ink); }
+.res-item { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.res-item:last-child { border-bottom: 0; }
+.res-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 500; }
+.ok { color: var(--ok); }
+.bad { color: var(--warn); }
+.score { font: 600 28px var(--mono); color: var(--accent); }
+.q { font-size: 17px; margin: 0 0 10px; }
+.opts { display: grid; gap: 8px; }
+.opts button { text-align: left; padding: 10px 12px; }
+.opts button.right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, var(--card)); }
+.opts button.wrong { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--card)); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+.small { font-size: 13px; color: var(--muted); }
+
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>EKG-Trainer, Realismus-Prototyp</h1>
+  <h1>EKG-Trainer</h1>
   <p class="sub">Alle Kurven werden live aus einem Reizleitungs- und Herzvektor-Modell erzeugt, nichts davon ist eine gespeicherte Aufnahme.</p>
+
+  <div class="tabs">
+    <button id="tabRead" aria-pressed="true">Befunden</button>
+    <button id="tabQuiz" aria-pressed="false">Quiz</button>
+    <button id="tabCat" aria-pressed="false">Katalog und Realismus-Check</button>
+  </div>
+  <div class="statline" id="statline"></div>
 
   <div class="bar">
     <label>Niveau
       <select id="level">
         <option value="rs">Rettungssanitäter</option>
         <option value="notsan">Notfallsanitäter</option>
-        <option value="arzt">Arzt</option>
-        <option value="experte" selected>Kardiologie / Experte</option>
+        <option value="arzt" selected>Arzt</option>
+        <option value="experte">Kardiologie / Experte</option>
       </select>
     </label>
-    <label>Fall
-      <select id="scenario"></select>
+    <label>Kategorie
+      <select id="cat"></select>
     </label>
     <label>Störungen
       <select id="noise">
@@ -90,14 +123,23 @@ ul.sol { margin: 0; padding-left: 18px; }
         <option value="high">stark (Wackeln, Brummen)</option>
       </select>
     </label>
+    <label>Papiergeschwindigkeit
+      <select id="speed"><option value="25" selected>25 mm/s</option><option value="50">50 mm/s</option></select>
+    </label>
+    <label>Verstärkung
+      <select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select>
+    </label>
     <label>Darstellung
       <span>
         <button id="modePaper" aria-pressed="true">Papier 12-Kanal</button>
         <button id="modeMonitor" aria-pressed="false">Monitor live</button>
       </span>
     </label>
-    <button id="reseed" class="primary">Neuer Fall (neue Variation)</button>
-    <button id="solToggle" aria-pressed="false">Lösung zeigen</button>
+    <label id="scenWrap" class="hidden">Fall
+      <select id="scenario"></select>
+    </label>
+    <button id="reseed" class="primary hidden">Neue Variation</button>
+    <button id="solToggle" aria-pressed="false" class="hidden">Lösung zeigen</button>
   </div>
 
   <div class="stage">
@@ -105,7 +147,49 @@ ul.sol { margin: 0; padding-left: 18px; }
     <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
   </div>
 
-  <div class="grid">
+  <div id="panelRead" class="card" style="margin-top:14px">
+    <h2>Befund</h2>
+    <div class="form" id="form">
+      <div class="row">
+        <label class="col">Rhythmus
+          <select id="fRhythm"></select>
+        </label>
+        <label class="col">Frequenz pro Minute (Kammern)
+          <input type="number" id="fRate" min="0" max="400" inputmode="numeric">
+        </label>
+        <label class="col" id="wAxis">Lagetyp
+          <select id="fAxis"></select>
+        </label>
+        <label class="col" id="wQrs">QRS-Breite
+          <select id="fQrs"><option value="">bitte wählen</option><option value="narrow">schmal (unter 120 ms)</option><option value="wide">breit (120 ms und mehr)</option></select>
+        </label>
+      </div>
+      <fieldset>
+        <legend>Zusatzbefunde (nichts ankreuzen, wenn sonst unauffällig)</legend>
+        <div class="checks" id="fFind"></div>
+      </fieldset>
+    </div>
+    <div class="actions">
+      <button class="primary" id="btnGrade">Auswerten</button>
+      <button id="btnNext" class="hidden">Nächster Fall</button>
+      <span class="small" id="gradeHint"></span>
+    </div>
+    <div id="result" class="hidden" style="margin-top:12px"></div>
+  </div>
+
+  <div id="panelQuiz" class="card hidden" style="margin-top:14px">
+    <h2 id="quizHead">Quiz</h2>
+    <p class="q">Welche Diagnose passt zu diesem EKG?</p>
+    <div class="opts" id="opts"></div>
+    <div id="quizFb" class="hidden" style="margin-top:10px"></div>
+    <div class="actions">
+      <button id="btnQNext" class="primary hidden">Weiter</button>
+      <button id="btnBlitz" aria-pressed="false">Blitz: 10 Fälle</button>
+      <span class="small" id="quizHint"></span>
+    </div>
+  </div>
+
+  <div id="panelCat" class="grid hidden">
     <div class="card">
       <h2>Realismus-Check (gemessen im Signal, 10 mm/mV)</h2>
       <div class="kv" id="kv"></div>
@@ -118,6 +202,7 @@ ul.sol { margin: 0; padding-left: 18px; }
       <ul class="sol hidden" id="sol"></ul>
     </div>
   </div>
+  <p class="note"><button id="btnExport">Lernstand exportieren</button> <button id="btnReset">Lernstand löschen</button></p>
 </div>
 <script type="module" src="./app.js"></script>
 </body>
