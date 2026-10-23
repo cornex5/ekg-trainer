@@ -88,6 +88,7 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
 .opts button.wrong { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--card)); }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
 .small { font-size: 13px; color: var(--muted); }
+.stage svg.cal { cursor: crosshair; }
 
 </style>
 </head>
@@ -100,6 +101,8 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
     <button id="tabRead" aria-pressed="true">Befunden</button>
     <button id="tabQuiz" aria-pressed="false">Quiz</button>
     <button id="tabBlind" aria-pressed="false">Blindtest</button>
+    <button id="tabFehler" aria-pressed="false">Fehlerquellen</button>
+    <button id="tabLive" aria-pressed="false">Monitor live</button>
     <button id="tabCat" aria-pressed="false">Katalog und Realismus-Check</button>
   </div>
   <div class="statline" id="statline"></div>
@@ -136,6 +139,15 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
         <button id="modeMonitor" aria-pressed="false">Monitor live</button>
       </span>
     </label>
+    <label>Fallgeschichte
+      <span><label style="display:flex;gap:6px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="chkCtx"> anzeigen</label></span>
+    </label>
+    <label>Werkzeuge
+      <span>
+        <button id="btnCaliper" aria-pressed="false">Messzirkel</button>
+        <button id="btnExplain" aria-pressed="false">Erklärebene</button>
+      </span>
+    </label>
     <label id="scenWrap" class="hidden">Fall
       <select id="scenario"></select>
     </label>
@@ -147,6 +159,9 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
     <div id="paper"></div>
     <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
   </div>
+
+  <div class="note" id="calRead"></div>
+  <div class="card hidden" id="ctxBox" style="margin-top:14px"></div>
 
   <div id="panelRead" class="card" style="margin-top:14px">
     <h2>Befund</h2>
@@ -201,6 +216,33 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
       <span class="small" id="blindHint"></span>
     </div>
     <div id="blindFb" class="hidden" style="margin-top:10px"></div>
+  </div>
+
+  <div id="panelFehler" class="card hidden" style="margin-top:14px">
+    <h2>Was ist an dieser Ableitung falsch?</h2>
+    <div class="opts" id="errOpts"></div>
+    <div id="errFb" class="hidden" style="margin-top:10px"></div>
+    <div class="actions">
+      <button id="btnErrNext" class="primary hidden">Weiter</button>
+      <span class="small" id="errHint"></span>
+    </div>
+  </div>
+
+  <div id="panelLive" class="card hidden" style="margin-top:14px">
+    <h2>Monitor live: Rhythmus ansagen</h2>
+    <div class="actions" style="margin-top:0">
+      <label>Szenario
+        <select id="liveStory"></select>
+      </label>
+      <button class="primary" id="btnLiveStart">Start</button>
+    </div>
+    <p class="small" id="liveIntro">Der Monitor läuft durch mehrere Rhythmen ohne Ankündigung. Sage jeden neuen Rhythmus an, sobald Du ihn erkennst. Gewertet wird die erste richtige Ansage je Abschnitt, mit Reaktionszeit.</p>
+    <div class="actions" id="liveCtl">
+      <select id="liveAns"></select>
+      <button id="btnLiveAns" class="primary">Ansagen</button>
+      <span class="small" id="liveLog"></span>
+    </div>
+    <div id="liveRes" class="hidden" style="margin-top:12px"></div>
   </div>
 
   <div id="panelCat" class="grid hidden">

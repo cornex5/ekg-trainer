@@ -5,6 +5,9 @@ const LEVELS = {
   low: { wander: 0.05, mains: 0.004, emg: 0.006, step: 0 },
   medium: { wander: 0.12, mains: 0.012, emg: 0.02, step: 0 },
   high: { wander: 0.25, mains: 0.03, emg: 0.05, step: 0.15 },
+  only_wander: { wander: 0.5, mains: 0, emg: 0, step: 0 },
+  only_mains: { wander: 0.02, mains: 0.09, emg: 0, step: 0 },
+  only_emg: { wander: 0.02, mains: 0, emg: 0.12, step: 0 },
 };
 
 // Noise is added after projection per lead, like it reaches the electrodes: wander and

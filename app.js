@@ -4,7 +4,10 @@ import { SCENARIOS, CATEGORIES } from './src/scenarios.js';
 import { measure, NORMAL_RANGES } from './src/measure.js';
 import { mulberry32 } from './src/rng.js';
 import { RHYTHMS, AXES, FINDINGS, TRUTH } from './src/truth.js';
+import { CONTEXT } from './src/context.js';
+import { LIVE, SEG_SECONDS } from './src/livescen.js';
 import { grade } from './src/grade.js';
+import { ERRORS, applyError, NOISE_FOR } from './src/errors.js';
 import { makeBlindSet } from './src/blind.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
 
@@ -65,6 +68,83 @@ function fillScenarios() {
   sel.value = state.sc.id;
 }
 
+// ---------- drawing, explanation layer, caliper ----------
+const tools = { caliper: false, explain: false, pts: [] };
+
+function marksFor(sig) {
+  if (!sig.sched || sig.sched.vf) return [];
+  const out = [];
+  const vent = sig.sched.ventricular.filter((b) => b.t > 0.2 && b.t < sig.duration - 0.6);
+  const atr = sig.sched.atrial.filter((a) => a.t > 0.2 && a.t < sig.duration - 0.3);
+  const D = sig.morph.qrs;
+  let first = 0;
+  for (const a of atr) out.push({ t0: a.t, t1: a.t + 0.1, color: '#1f5fa8', label: first++ < 2 ? 'P' : '' });
+  first = 0;
+  for (let bi = 0; bi < vent.length; bi++) {
+    const b = vent[bi];
+    const next = vent[bi + 1] ? vent[bi + 1].t - 0.03 : Infinity;
+    const lab = first++ < 2;
+    const pvc = b.morph === 'pvc';
+    out.push({ t0: b.t, t1: b.t + (pvc ? 0.14 : D), color: '#a8201a', label: lab ? (pvc ? 'VES' : 'QRS') : '' });
+    const qt = Math.max(0.2, sig.morph.qtc * Math.cbrt(b.rr || 0.8));
+    out.push({ t0: b.t + (pvc ? 0.14 : D), t1: Math.min(b.t + qt, next), color: '#1f6b3a', label: lab ? 'ST und T' : '', low: true });
+  }
+  return out;
+}
+
+function redrawPaper() {
+  if (!state.sig) return;
+  const marks = tools.explain && state.tab !== 'blind' ? marksFor(state.sig) : [];
+  $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value), marks });
+  const svg = $('paper').querySelector('svg');
+  if (svg) svg.classList.toggle('cal', tools.caliper);
+  drawCaliper();
+}
+
+function svgPoint(e) {
+  const svg = $('paper').querySelector('svg');
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const q = pt.matrixTransform(svg.getScreenCTM().inverse());
+  return [q.x, q.y];
+}
+
+function drawCaliper() {
+  const svg = $('paper').querySelector('svg');
+  const old = svg && svg.querySelector('#calLayer');
+  if (old) old.remove();
+  if (!svg || !tools.pts.length) {
+    $('calRead').textContent = tools.caliper ? 'Messzirkel: zwei Punkte im EKG anklicken. Dritter Klick beginnt neu.' : '';
+    return;
+  }
+  const speed = Number($('speed').value);
+  const gain = Number($('gain').value);
+  let g = '<g id="calLayer" stroke="#0a58c2" fill="#0a58c2" font-family="Arial, sans-serif">';
+  for (const [x, y] of tools.pts) g += `<circle cx="${x.toFixed(2)}" cy="${y.toFixed(2)}" r="0.7"/><path d="M${x.toFixed(2)} ${(y - 6).toFixed(2)}V${(y + 6).toFixed(2)}" stroke-width="0.2" stroke-dasharray="1 1"/>`;
+  if (tools.pts.length === 2) {
+    const [[x1, y1], [x2, y2]] = tools.pts;
+    g += `<path d="M${x1.toFixed(2)} ${y1.toFixed(2)}L${x2.toFixed(2)} ${y2.toFixed(2)}" stroke-width="0.35"/>`;
+    const dx = Math.abs(x2 - x1);
+    const dy = Math.abs(y2 - y1);
+    const ms = Math.round((dx / speed) * 1000);
+    const mv = (dy / gain).toFixed(2).replace('.', ',');
+    $('calRead').innerHTML = `Messzirkel: <b>${ms} ms</b> (${dx.toFixed(1)} mm waagerecht, entspricht ${ms ? Math.round(60000 / ms) : '-'}/min als Abstand), <b>${mv} mV</b> (${dy.toFixed(1)} mm senkrecht).`;
+  } else {
+    $('calRead').textContent = 'Zweiten Punkt anklicken.';
+  }
+  g += '</g>';
+  svg.insertAdjacentHTML('beforeend', g);
+}
+
+function setExplainAvail(avail, reset = false) {
+  $('btnExplain').disabled = !avail;
+  if (!avail || reset) {
+    if (reset || !avail) tools.explain = false;
+    $('btnExplain').setAttribute('aria-pressed', 'false');
+  }
+}
+
 // ---------- signal ----------
 function build() {
   const base = state.sc;
@@ -76,7 +156,8 @@ function build() {
     sc.hr = Math.round(base.hr * (0.92 + 0.16 * r));
   }
   state.sig = generate(sc);
-  $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value) });
+  tools.pts = [];
+  redrawPaper();
   startMonitor();
 }
 
@@ -90,6 +171,7 @@ function newCase() {
 
 // ---------- Befunden ----------
 function resetForm() {
+  setExplainAvail(false);
   $('fRhythm').value = '';
   $('fRate').value = '';
   $('fAxis').value = '';
@@ -112,6 +194,7 @@ function setFormDisabled(d) {
 function readCase() {
   newCase();
   resetForm();
+  showContext();
 }
 
 function doGrade() {
@@ -129,6 +212,7 @@ function doGrade() {
   };
   const g = grade(state.sig, state.sc, ans, level());
   state.graded = true;
+  setExplainAvail(true);
   setFormDisabled(true);
   record(state.sc.id, g.pct, 'read');
   const rows = g.items
@@ -152,6 +236,8 @@ function doGrade() {
 // ---------- Quiz ----------
 function quizQuestion() {
   newCase();
+  setExplainAvail(false);
+  showContext();
   state.quiz.answered = false;
   const p = pool();
   const key = (s) => TRUTH[s.id].rhythm + '|' + TRUTH[s.id].findings.join(',');
@@ -175,6 +261,7 @@ function quizQuestion() {
 function quizAnswer(id) {
   if (state.quiz.answered) return;
   state.quiz.answered = true;
+  setExplainAvail(true);
   const right = id === state.sc.id;
   for (const b of $('opts').querySelectorAll('button')) {
     if (b.dataset.id === state.sc.id) b.classList.add('right');
@@ -210,7 +297,8 @@ function blindShow() {
   const it = blind.items[blind.i];
   state.sig = it.make();
   blind.answered = false;
-  $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value) });
+  tools.pts = [];
+  redrawPaper();
   $('blindFb').classList.add('hidden');
   $('btnBlindNext').classList.add('hidden');
   $('btnBlindReal').disabled = false;
@@ -241,6 +329,117 @@ function blindAnswer(guessReal) {
   if (!last) $('btnBlindNext').classList.remove('hidden');
 }
 
+// ---------- Fehlerquellen ----------
+const err = { cur: null, answered: false };
+function errorCase() {
+  setExplainAvail(false);
+  err.answered = false;
+  err.cur = ERRORS[Math.floor(Math.random() * ERRORS.length)];
+  const id = err.cur[0];
+  const seed = 100 + Math.floor(Math.random() * 9000);
+  const base = { rhythm: 'sinus', hr: 66 + Math.floor(Math.random() * 22), seed, noise: NOISE_FOR[id] ?? 'low', id: 'fehler' };
+  const sig = generate(base);
+  sig.leads = applyError(sig.leads, id);
+  state.sig = sig;
+  tools.pts = [];
+  redrawPaper();
+  $('errOpts').innerHTML = ERRORS.map((e) => `<button data-id="${e[0]}">${esc(e[1])}</button>`).join('');
+  $('errFb').classList.add('hidden');
+  $('btnErrNext').classList.add('hidden');
+}
+function errorAnswer(id) {
+  if (err.answered) return;
+  err.answered = true;
+  const right = id === err.cur[0];
+  for (const b of $('errOpts').querySelectorAll('button')) {
+    if (b.dataset.id === err.cur[0]) b.classList.add('right');
+    else if (b.dataset.id === id) b.classList.add('wrong');
+  }
+  record('fehler-' + err.cur[0], right ? 100 : 0, 'fehler');
+  setExplainAvail(false);
+  $('errFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${right ? 'Richtig.' : 'Nicht ganz.'}</strong> ${esc(err.cur[1])}<div class="small">${esc(err.cur[2])}</div>`;
+  $('errFb').classList.remove('hidden');
+  $('btnErrNext').classList.remove('hidden');
+  renderStats();
+}
+
+// ---------- Monitor live ----------
+const live = { running: false, total: 0, story: null, answers: [] };
+const MON_RHYTHMS = [...RHYTHMS, ['pvc', 'Sinusrhythmus mit Extrasystolen']];
+const monTruth = (id) => (TRUTH[id].findings.includes('pvc') ? 'pvc' : TRUTH[id].rhythm);
+const monLabel = (r) => MON_RHYTHMS.find((x) => x[0] === r)[1];
+
+function liveSetup() {
+  $('liveStory').innerHTML = LIVE.map((l, i) => `<option value="${i}">${esc(l.title)}</option>`).join('');
+  $('liveAns').innerHTML = MON_RHYTHMS.map((r) => `<option value="${r[0]}">${esc(r[1])}</option>`).join('');
+  $('liveStory').querySelectorAll('option').forEach((o) => (o.textContent = 'Szenario ' + (Number(o.value) + 1)));
+  live.running = false;
+  $('liveRes').classList.add('hidden');
+  $('liveCtl').classList.add('hidden');
+  cancelAnimationFrame(raf);
+}
+
+function startLive() {
+  const story = LIVE[Number($('liveStory').value)];
+  live.story = story;
+  live.answers = [];
+  const parts = story.segs.map((id) => {
+    const sc = SCENARIOS.find((s) => s.id === id);
+    return generate({ ...sc, seed: 100 + Math.floor(Math.random() * 90000), duration: SEG_SECONDS, noise: 'low' }).leads[1];
+  });
+  const fs = 500;
+  const all = new Float32Array(parts.length * SEG_SECONDS * fs);
+  parts.forEach((p, k) => all.set(p.subarray(0, SEG_SECONDS * fs), k * SEG_SECONDS * fs));
+  live.total = parts.length * SEG_SECONDS;
+  state.sig = { fs, n: all.length, duration: live.total, leads: [null, all] };
+  live.running = true;
+  $('liveRes').classList.add('hidden');
+  $('liveCtl').classList.remove('hidden');
+  $('liveLog').textContent = 'Läuft. Beim Rhythmuswechsel sofort ansagen.';
+  setMode('monitor');
+  startMonitor();
+}
+
+function liveAnswer() {
+  if (!live.running) return;
+  live.answers.push({ t: monClock, r: $('liveAns').value });
+  $('liveLog').textContent = `Angesagt: ${monLabel($('liveAns').value)}`;
+}
+
+function finishLive() {
+  live.running = false;
+  cancelAnimationFrame(raf);
+  $('liveCtl').classList.add('hidden');
+  let hits = 0;
+  const rows = live.story.segs
+    .map((id, i) => {
+      const truth = monTruth(id);
+      const a0 = i * SEG_SECONDS;
+      const a1 = a0 + SEG_SECONDS;
+      const mine = live.answers.filter((a) => a.t >= a0 && a.t < a1 + (i < live.story.segs.length - 1 ? 3 : 0));
+      const okA = mine.find((a) => a.r === truth && a.t >= (i === 0 ? 0 : a0 - 3));
+      const wrong = mine.filter((a) => a.r !== truth).length;
+      const prevCovered = live.answers.some((a) => a.r === truth && a.t >= a0 - 3 && a.t < a0);
+      if (okA || prevCovered) hits += 1;
+      record(id, okA ? 100 : 0, 'live');
+      const t = okA ? `erkannt nach ${Math.max(0, okA.t - a0).toFixed(1).replace('.', ',')} s` : 'nicht erkannt';
+      return `<div class="res-item"><div class="res-head"><span>Abschnitt ${i + 1}: ${esc(monLabel(truth))}</span><span class="${okA ? 'ok' : 'bad'}">${t}</span></div>${wrong ? `<div class="small">${wrong} falsche Ansage(n) in diesem Abschnitt</div>` : ''}</div>`;
+    })
+    .join('');
+  $('liveRes').innerHTML = `<div class="score">${hits} von ${live.story.segs.length}</div><div class="small">${esc(live.story.title)}</div>${rows}`;
+  $('liveRes').classList.remove('hidden');
+  renderStats();
+}
+
+function showContext() {
+  const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'quiz');
+  const t = CONTEXT[state.sc.id];
+  if (on && t) {
+    $('ctxBox').innerHTML = `<h2>Fallgeschichte</h2><div>${esc(t)}</div>`;
+    $('ctxBox').classList.remove('hidden');
+  } else $('ctxBox').classList.add('hidden');
+}
+
 // ---------- Katalog ----------
 function runCatalog() {
   build();
@@ -258,6 +457,8 @@ function runCatalog() {
 
 // ---------- Monitor ----------
 let raf = 0;
+let monT0 = 0;
+let monClock = 0;
 function startMonitor() {
   cancelAnimationFrame(raf);
   if (state.mode !== 'monitor' || !state.sig) return;
@@ -271,12 +472,18 @@ function startMonitor() {
   const gapPx = 40;
   const pxPerMv = 130;
   const y0 = 200;
-  const m = measure(sig);
+  const m = state.tab === 'cat' ? measure(sig) : { hr: null };
+  monT0 = performance.now();
   // the live rate number would give the answer away while reading, so it is only shown in the catalogue
   const showHr = state.tab === 'cat';
 
   function frame(now) {
-    const t = now / 1000;
+    const t = (now - monT0) / 1000;
+    monClock = t;
+    if (state.tab === 'live' && live.running && t >= live.total) {
+      finishLive();
+      return;
+    }
     const cyc = Math.floor(t / sweep);
     const phase = (t % sweep) / sweep;
     const headX = Math.floor(phase * W);
@@ -317,7 +524,7 @@ function startMonitor() {
 }
 
 function setMode(mode) {
-  if (state.tab === 'blind') mode = 'paper';
+  if (state.tab === 'blind' || state.tab === 'fehler') mode = 'paper';
   state.mode = mode;
   $('paper').classList.toggle('hidden', mode !== 'paper');
   $('monitor').classList.toggle('hidden', mode !== 'monitor');
@@ -333,20 +540,36 @@ function renderStats() {
 }
 
 function setTab(tab) {
+  const prev = state.tab;
   state.tab = tab;
-  for (const [id, t] of [['tabRead', 'read'], ['tabQuiz', 'quiz'], ['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
+  if (prev === 'live' && tab !== 'live') {
+    live.running = false;
+    setMode('paper');
+  }
+  for (const [id, t] of [['tabRead', 'read'], ['tabQuiz', 'quiz'], ['tabBlind', 'blind'], ['tabFehler', 'fehler'], ['tabLive', 'live'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
   $('panelRead').classList.toggle('hidden', tab !== 'read');
   $('panelQuiz').classList.toggle('hidden', tab !== 'quiz');
   $('panelBlind').classList.toggle('hidden', tab !== 'blind');
+  $('panelFehler').classList.toggle('hidden', tab !== 'fehler');
+  $('panelLive').classList.toggle('hidden', tab !== 'live');
+  if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
   $('panelCat').classList.toggle('hidden', tab !== 'cat');
   for (const id of ['scenWrap', 'reseed', 'solToggle']) $(id).classList.toggle('hidden', tab !== 'cat');
   $('cat').parentElement.classList.toggle('hidden', tab === 'cat');
-  if (tab === 'blind') setMode('paper');
+  if (tab === 'blind' || tab === 'fehler') setMode('paper');
   if (tab === 'read') readCase();
   else if (tab === 'quiz') quizQuestion();
-  else if (tab === 'blind') blindStart();
+  else if (tab === 'blind') {
+    setExplainAvail(false);
+    blindStart();
+  } else if (tab === 'fehler') errorCase();
+  else if (tab === 'live') {
+    setExplainAvail(false);
+    liveSetup();
+  }
   else {
     fillScenarios();
+    setExplainAvail(true);
     runCatalog();
   }
 }
@@ -355,6 +578,23 @@ function setTab(tab) {
 $('tabRead').addEventListener('click', () => setTab('read'));
 $('tabQuiz').addEventListener('click', () => setTab('quiz'));
 $('tabBlind').addEventListener('click', () => setTab('blind'));
+$('tabFehler').addEventListener('click', () => setTab('fehler'));
+$('tabLive').addEventListener('click', () => setTab('live'));
+$('btnLiveStart').addEventListener('click', startLive);
+$('btnLiveAns').addEventListener('click', liveAnswer);
+$('chkCtx').addEventListener('change', () => {
+  try {
+    localStorage.setItem('ekg-ctx', $('chkCtx').checked ? '1' : '0');
+  } catch (e) {
+    /* ignore */
+  }
+  showContext();
+});
+$('errOpts').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (b) errorAnswer(b.dataset.id);
+});
+$('btnErrNext').addEventListener('click', errorCase);
 $('tabCat').addEventListener('click', () => setTab('cat'));
 $('btnBlindReal').addEventListener('click', () => blindAnswer(true));
 $('btnBlindSim').addEventListener('click', () => blindAnswer(false));
@@ -363,6 +603,24 @@ $('btnBlindNext').addEventListener('click', () => {
   blindShow();
 });
 $('btnBlindStart').addEventListener('click', blindStart);
+$('btnCaliper').addEventListener('click', () => {
+  tools.caliper = !tools.caliper;
+  tools.pts = [];
+  $('btnCaliper').setAttribute('aria-pressed', String(tools.caliper));
+  redrawPaper();
+});
+$('btnExplain').addEventListener('click', () => {
+  if ($('btnExplain').disabled) return;
+  tools.explain = !tools.explain;
+  $('btnExplain').setAttribute('aria-pressed', String(tools.explain));
+  redrawPaper();
+});
+$('paper').addEventListener('click', (e) => {
+  if (!tools.caliper || !$('paper').querySelector('svg')) return;
+  if (tools.pts.length >= 2) tools.pts = [];
+  tools.pts.push(svgPoint(e));
+  drawCaliper();
+});
 $('btnGrade').addEventListener('click', doGrade);
 $('btnNext').addEventListener('click', readCase);
 $('btnQNext').addEventListener('click', quizQuestion);
@@ -378,7 +636,7 @@ $('btnBlitz').addEventListener('click', () => {
 $('level').addEventListener('change', () => setTab(state.tab));
 $('cat').addEventListener('change', () => setTab(state.tab));
 function refresh() {
-  if (state.tab === 'blind') $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value) });
+  if (state.tab === 'blind' || state.tab === 'fehler') redrawPaper();
   else if (state.tab === 'cat') runCatalog();
   else build();
 }
@@ -418,5 +676,10 @@ $('btnReset').addEventListener('click', () => {
   renderStats();
 });
 
+try {
+  $('chkCtx').checked = localStorage.getItem('ekg-ctx') === '1';
+} catch (e) {
+  /* ignore */
+}
 renderStats();
 setTab('read');

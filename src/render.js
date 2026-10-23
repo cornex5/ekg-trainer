@@ -79,6 +79,13 @@ export function paperSvg(sig, o = {}) {
     const w = 0.2 * mmPerSec;
     trace.push(`M${x} ${y}H${x + 1}V${y - mmPerMv}H${x + 1 + w}V${y}H${x + 2 + w}`);
   }
+  for (const mk of o.marks ?? []) {
+    const x = marginL + mk.t0 * mmPerSec;
+    const w = Math.max(0.4, (mk.t1 - mk.t0) * mmPerSec);
+    const y = rowY(3);
+    lines.push(`<rect x="${x.toFixed(2)}" y="${(y - 13).toFixed(1)}" width="${w.toFixed(2)}" height="26" fill="${mk.color}" fill-opacity="0.2"/>`);
+    if (mk.label) lines.push(`<text x="${(x + w / 2).toFixed(2)}" y="${(y + (mk.low ? 17 : -14.5)).toFixed(1)}" text-anchor="middle" font-size="2.7" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="${mk.color}">${mk.label}</text>`);
+  }
   lines.push(`<path d="${trace.join('')}" stroke="#141414" stroke-width="0.34" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`);
   lines.push(...labels);
   const head = o.header ?? `${mmPerSec} mm/s   ${mmPerMv} mm/mV   0,5 bis 150 Hz`;
