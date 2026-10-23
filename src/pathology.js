@@ -157,8 +157,8 @@ const FINDINGS = {
     m.t = [0.05, 0.05, -0.32];
   },
   wellens(m) {
-    const dir = TERRITORY.anterior;
-    m.t = add(m.t, scale(dir, -0.8));
+    // anterior only: V2 and V3 turn negative, the lateral leads stay upright
+    m.t = add(m.t, [-0.02, -0.08, -0.85]);
   },
   digoxin(m) {
     m.st = scale(unit(m.r), -0.15);
@@ -173,9 +173,10 @@ const FINDINGS = {
 function individual(m, sc, fixedAxis) {
   const rng = mulberry32((sc.seed ?? 1) * 7919 + 13);
   const g = () => gaussian(rng);
-  const kq = Math.exp((fixedAxis ? 0.15 : 0.28) * g());
-  const kz = Math.exp((fixedAxis ? 0.12 : 0.25) * g());
-  const kt = Math.exp(0.25 * g());
+  const clamp = (x) => Math.min(1.5, Math.max(0.67, x));
+  const kq = clamp(Math.exp((fixedAxis ? 0.15 : 0.28) * g()));
+  const kz = clamp(Math.exp((fixedAxis ? 0.12 : 0.25) * g()));
+  const kt = clamp(Math.exp(0.25 * g()));
   const th = fixedAxis ? 0 : ((24 * g()) * Math.PI) / 180;
   const rot = (v, a) => [v[0] * Math.cos(a) - v[1] * Math.sin(a), v[0] * Math.sin(a) + v[1] * Math.cos(a), v[2]];
   for (const k of ['q', 'r', 's']) {

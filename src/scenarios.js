@@ -51,11 +51,11 @@ export const SCENARIOS = [
   // Ischämie
   { id: 'stemi-inf', cat: 5, level: 'rs', title: 'Akuter inferiorer STEMI', rhythm: 'sinus', hr: 84, seed: 61, stemi: { territory: 'inferior', stage: 'acute', severity: 0.34 },
     solution: ['Sinusrhythmus um 84/min', 'ST-Hebungen in II, III, aVF (III größer als II)', 'Spiegelbildliche ST-Senkungen in I und aVL', 'Inferiorer STEMI, Versorgungsgebiet der rechten Koronararterie'] },
-  { id: 'stemi-ant', cat: 5, level: 'rs', title: 'Akuter Vorderwand-STEMI', rhythm: 'sinus', hr: 92, seed: 62, stemi: { territory: 'anterior', stage: 'acute', severity: 0.3 },
+  { id: 'stemi-ant', cat: 5, level: 'rs', title: 'Akuter Vorderwand-STEMI', rhythm: 'sinus', hr: 92, seed: 62, stemi: { territory: 'anterior', stage: 'acute', severity: 0.44 },
     solution: ['Sinusrhythmus um 92/min', 'ST-Hebungen in V1 bis V5, I und aVL', 'Spiegelbildliche ST-Senkungen inferior (III, aVF)', 'Vorderwandinfarkt, Versorgungsgebiet des Ramus interventricularis anterior'] },
   { id: 'stemi-lat', cat: 5, level: 'notsan', title: 'Akuter Lateralinfarkt (STEMI)', rhythm: 'sinus', hr: 78, seed: 63, stemi: { territory: 'lateral', stage: 'acute', severity: 0.3 },
     solution: ['ST-Hebungen in I, aVL, V5 und V6', 'Spiegelbildliche ST-Senkungen inferior', 'Lateraler STEMI, Versorgungsgebiet des Ramus circumflexus oder von Diagonalästen'] },
-  { id: 'stemi-post', cat: 5, level: 'arzt', title: 'Akuter Hinterwandinfarkt', rhythm: 'sinus', hr: 82, seed: 64, stemi: { territory: 'posterior', stage: 'acute', severity: 0.34 },
+  { id: 'stemi-post', cat: 5, level: 'arzt', title: 'Akuter Hinterwandinfarkt', rhythm: 'sinus', hr: 82, seed: 68, stemi: { territory: 'posterior', stage: 'acute', severity: 0.34 },
     solution: ['Horizontale ST-Senkungen in V1 bis V3, hohe R-Zacke in V1/V2', 'Spiegelbild einer posterioren ST-Hebung, nur in V7 bis V9 direkt sichtbar', 'Posteriorer Infarkt, als STEMI-Äquivalent behandeln'] },
   { id: 'stemi-hyperacute', cat: 5, level: 'arzt', title: 'Hyperakute T-Wellen (früher Vorderwandinfarkt)', rhythm: 'sinus', hr: 80, seed: 65, stemi: { territory: 'anterior', stage: 'hyperacute', severity: 0.3 },
     solution: ['Auffällig hohe, breitbasige T-Wellen in V2 bis V4', 'Nur geringe ST-Hebung', 'Frühstadium des Vorderwandinfarkts, Verlaufskontrolle und Troponin'] },
