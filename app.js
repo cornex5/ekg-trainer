@@ -6,11 +6,13 @@ import { mulberry32 } from './src/rng.js';
 import { RHYTHMS, AXES, FINDINGS, TRUTH } from './src/truth.js';
 import { CONTEXT } from './src/context.js';
 import { LIVE, SEG_SECONDS } from './src/livescen.js';
-import { grade, truthSummary } from './src/grade.js';
+import { grade, truthSummary, caseFacts } from './src/grade.js';
 import { ERRORS, applyError, NOISE_FOR } from './src/errors.js';
 import { makeBlindSet } from './src/blind.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
-import { apiStatus, transcribe, evaluate, startRecording, micSupported, getCode, setCode, MAX_SECONDS } from './src/voice.js';
+import { apiStatus, evaluate, getCode, setCode } from './src/api.js';
+import { stepsFor, derive, answersToForm, labelOf, review } from './src/wizard.js';
+import { createZoom } from './src/zoom.js';
 
 const $ = (id) => document.getElementById(id);
 const LEVELS = ['rs', 'notsan', 'arzt', 'experte'];
@@ -94,6 +96,7 @@ function marksFor(sig) {
 
 function updateStageInfo() {
   const mon = state.mode === 'monitor';
+  $('btnZoom').disabled = mon;
   $('stageInfo').textContent = mon ? `Monitor, Ableitung II · ${$('gain').value} mm/mV` : `12 Ableitungen · ${$('speed').value} mm/s · ${$('gain').value} mm/mV`;
 }
 
@@ -101,13 +104,22 @@ function redrawPaper() {
   updateStageInfo();
   if (!state.sig) return;
   const marks = tools.explain && state.tab !== 'blind' ? marksFor(state.sig) : [];
-  $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value), marks });
+  state.svgStr = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value), marks });
+  $('paper').innerHTML = state.svgStr;
   const svg = $('paper').querySelector('svg');
-  if (svg) svg.classList.toggle('cal', tools.caliper);
+  if (svg) {
+    svg.classList.toggle('cal', tools.caliper);
+    svg.classList.toggle('zoomable', !tools.caliper);
+  }
+  if (zoomUi.open) zoomer.load(state.svgStr, true);
   drawCaliper();
 }
 
+const zoomUi = { open: false };
+let zoomer = null;
+
 function svgPoint(e) {
+  if (zoomUi.open) return zoomer.point(e);
   const svg = $('paper').querySelector('svg');
   const pt = svg.createSVGPoint();
   pt.x = e.clientX;
@@ -116,12 +128,21 @@ function svgPoint(e) {
   return [q.x, q.y];
 }
 
+function setCalText(text, html) {
+  for (const id of ['calRead', 'zoomRead']) {
+    if (html) $(id).innerHTML = html;
+    else $(id).textContent = text;
+  }
+}
+
 function drawCaliper() {
-  const svg = $('paper').querySelector('svg');
-  const old = svg && svg.querySelector('#calLayer');
-  if (old) old.remove();
-  if (!svg || !tools.pts.length) {
-    $('calRead').textContent = tools.caliper ? 'Messzirkel: zwei Punkte im EKG anklicken. Dritter Klick beginnt neu.' : '';
+  const svgs = [$('paper').querySelector('svg'), zoomUi.open ? zoomer.svg() : null].filter(Boolean);
+  for (const svg of svgs) {
+    const old = svg.querySelector('#calLayer');
+    if (old) old.remove();
+  }
+  if (!svgs.length || !tools.pts.length) {
+    setCalText(tools.caliper ? 'Messzirkel: zwei Punkte im EKG anklicken. Ein dritter Klick beginnt neu.' : '');
     return;
   }
   const speed = Number($('speed').value);
@@ -135,20 +156,61 @@ function drawCaliper() {
     const dy = Math.abs(y2 - y1);
     const ms = Math.round((dx / speed) * 1000);
     const mv = (dy / gain).toFixed(2).replace('.', ',');
-    $('calRead').innerHTML = `Messzirkel: <b>${ms} ms</b> (${dx.toFixed(1)} mm waagerecht, entspricht ${ms ? Math.round(60000 / ms) : '-'}/min als Abstand), <b>${mv} mV</b> (${dy.toFixed(1)} mm senkrecht).`;
+    setCalText('', `Messzirkel: <b>${ms} ms</b> (${dx.toFixed(1)} mm waagerecht, entspricht ${ms ? Math.round(60000 / ms) : '-'}/min als Abstand), <b>${mv} mV</b> (${dy.toFixed(1)} mm senkrecht).`);
   } else {
-    $('calRead').textContent = 'Zweiten Punkt anklicken.';
+    setCalText('Zweiten Punkt anklicken.');
   }
   g += '</g>';
-  svg.insertAdjacentHTML('beforeend', g);
+  for (const svg of svgs) svg.insertAdjacentHTML('beforeend', g);
+}
+
+function syncTools() {
+  for (const id of ['btnCaliper', 'zCaliper']) $(id).setAttribute('aria-pressed', String(tools.caliper));
+  for (const id of ['btnExplain', 'zExplain']) {
+    $(id).setAttribute('aria-pressed', String(tools.explain));
+    $(id).disabled = $('btnExplain').disabled;
+  }
+  $('zoom').classList.toggle('cal', tools.caliper);
+}
+function toggleCaliper() {
+  tools.caliper = !tools.caliper;
+  tools.pts = [];
+  syncTools();
+  redrawPaper();
+}
+function toggleExplain() {
+  if ($('btnExplain').disabled) return;
+  tools.explain = !tools.explain;
+  syncTools();
+  redrawPaper();
+}
+function openZoom() {
+  if (state.mode !== 'paper' || !state.svgStr || !$('paper').querySelector('svg')) return;
+  zoomUi.open = true;
+  $('zoom').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  zoomer.load(state.svgStr, false);
+  syncTools();
+  drawCaliper();
+  $('zClose').focus();
+}
+function closeZoom() {
+  if (!zoomUi.open) return;
+  zoomUi.open = false;
+  $('zoom').classList.add('hidden');
+  document.body.style.overflow = '';
+  drawCaliper();
 }
 
 function setExplainAvail(avail, reset = false) {
+  const was = tools.explain;
   $('btnExplain').disabled = !avail;
-  if (!avail || reset) {
-    if (reset || !avail) tools.explain = false;
-    $('btnExplain').setAttribute('aria-pressed', 'false');
-  }
+  if (!avail || reset) tools.explain = false;
+  syncTools();
+  if (was && !tools.explain) redrawPaperIfReady();
+}
+function redrawPaperIfReady() {
+  if (state.sig && $('paper').querySelector('svg')) redrawPaper();
 }
 
 // ---------- signal ----------
@@ -176,39 +238,150 @@ function newCase() {
 }
 
 // ---------- Befunden ----------
-function resetForm() {
+const LEVEL_NAME = { rs: 'Rettungssanitäter', notsan: 'Notfallsanitäter', arzt: 'Arzt', experte: 'Experte' };
+const read = { mode: 'wz', wz: { a: {}, i: 0 }, step: 0, alt: false, status: undefined };
+const ST_STEPS = 3;
+
+function readMode() {
+  if (level() === 'rs') return 'wz';
+  if (level() === 'notsan') return 'steps';
+  return read.alt ? 'steps' : 'free';
+}
+
+function dots(el, total, cur) {
+  el.innerHTML = Array.from({ length: total }, (_, i) => `<i class="${i < cur ? 'done' : i === cur ? 'cur' : ''}"></i>`).join('');
+}
+
+function resetRead() {
   setExplainAvail(false);
-  $('fRhythm').value = '';
-  $('fRate').value = '';
-  $('fAxis').value = '';
-  $('fQrs').value = '';
-  for (const c of $('fFind').querySelectorAll('input')) c.checked = false;
+  state.graded = false;
+  read.mode = readMode();
+  for (const [m, id] of [['wz', 'modeWz'], ['steps', 'modeSteps'], ['free', 'modeFree']]) $(id).classList.toggle('hidden', m !== read.mode);
   $('result').classList.add('hidden');
   $('btnNext').classList.add('hidden');
-  $('btnGrade').classList.remove('hidden');
-  $('gradeHint').textContent = '';
-  setFormDisabled(false);
-  state.graded = false;
-  const simple = level() === 'rs';
-  $('wAxis').classList.toggle('hidden', simple);
-  $('wQrs').classList.toggle('hidden', simple);
+  const kind = { wz: 'Schritt für Schritt', steps: 'Schritt-Formular', free: 'Freitext, ausgewertet von Claude' }[read.mode];
+  $('readTag').textContent = `${LEVEL_NAME[level()]}: ${kind}`;
+  if (read.mode === 'wz') {
+    read.wz = { a: {}, i: 0 };
+    renderWz();
+  } else if (read.mode === 'steps') {
+    $('fRhythm').value = '';
+    $('fRate').value = '';
+    $('fAxis').value = '';
+    $('fQrs').value = '';
+    for (const c of $('fFind').querySelectorAll('input')) c.checked = false;
+    setFormDisabled(false);
+    read.step = 0;
+    showStep();
+    $('stFree').classList.toggle('hidden', level() === 'rs' || level() === 'notsan');
+  } else {
+    $('freeText').value = '';
+    $('freeText').disabled = false;
+    $('freeGo').disabled = false;
+    $('freeGo').classList.remove('hidden');
+    $('freeAlt').classList.remove('hidden');
+    $('freeErr').classList.add('hidden');
+    $('freeHint').textContent = '';
+    $('fGuide').innerHTML = GUIDE[level()].map((t) => `<li>${esc(t)}</li>`).join('');
+    checkStatus();
+  }
 }
-function setFormDisabled(d) {
-  for (const el of $('form').querySelectorAll('select,input')) el.disabled = d;
+
+const GUIDE = {
+  arzt: ['Rhythmus, Frequenz, Regelmäßigkeit', 'Lagetyp', 'P-Welle und PQ-Zeit', 'QRS-Breite und Morphologie', 'ST-Strecke und T-Welle, regional zugeordnet', 'QT-Zeit', 'Zusammenfassende Beurteilung'],
+  experte: ['Rhythmus, Frequenz, Überleitung', 'Lagetyp und Hinweise auf Blöcke', 'P-Welle, PQ, QRS-Morphologie, Zeiten', 'ST-T je Region mit Spiegelbildern', 'Besonderheiten (Delta, Epsilon, U, Brugada und andere)', 'Differenzialdiagnosen', 'Klinische Konsequenz'],
+};
+
+async function checkStatus() {
+  if (read.status === undefined) read.status = await apiStatus();
+  const st = read.status;
+  $('vCodeWrap').classList.toggle('hidden', !(st && st.needsCode));
+  if (read.mode !== 'free') return;
+  if (!st) showFreeErr('Der Server ist nicht erreichbar. Nutze solange das Schritt-Formular.');
+  else if (!st.evaluate) showFreeErr('Die Bewertung ist auf dem Server noch nicht eingerichtet. Nutze solange das Schritt-Formular.');
+}
+function showFreeErr(msg) {
+  $('freeErr').textContent = msg;
+  $('freeErr').classList.remove('hidden');
 }
 
 function readCase() {
   newCase();
-  resetForm();
+  resetRead();
   showContext();
+  if ($('work').getBoundingClientRect().top < 0) $('work').scrollIntoView({ block: 'start' });
 }
 
-function doGrade() {
-  if (state.graded) return;
-  if (!$('fRhythm').value) {
-    $('gradeHint').textContent = 'Wähle zuerst einen Rhythmus.';
+// ----- wizard (Rettungssanitäter)
+function renderWz() {
+  const w = read.wz;
+  const steps = stepsFor(w.a);
+  dots($('wzDots'), steps.length + 1, w.i);
+  $('wzBack').disabled = w.i === 0;
+  const done = steps.slice(0, w.i).map((s) => (s.id === 'rate' ? `${w.a.rate}/min` : labelOf(s.id, w.a[s.id])));
+  $('wzSum').innerHTML = done.map((t) => `<span>${esc(t)}</span>`).join('');
+  if (w.i >= steps.length) {
+    const sug = derive(w.a);
+    $('wzBody').innerHTML = `<p class="wq">Dein Befund</p><p class="wh">Aus Deinen Antworten ergibt sich dieser Rhythmus. Du kannst ihn ändern, bevor Du auswertest.</p>
+      <label>Rhythmus<select id="wzRhythm">${RHYTHMS.map((r) => `<option value="${r[0]}"${r[0] === sug ? ' selected' : ''}>${esc(r[1])}</option>`).join('')}</select></label>
+      <div class="actions"><button class="primary" data-go="1">Auswerten</button></div>`;
     return;
   }
+  const s = steps[w.i];
+  let body = `<p class="wq">${esc(s.q)}</p><p class="wh">${esc(s.hint || '')}</p>`;
+  if (s.type === 'number') {
+    body += `<div class="numrow"><input type="number" id="wzRate" min="10" max="400" inputmode="numeric" value="${esc(w.a.rate ?? '')}" aria-label="Frequenz pro Minute"><span class="small">pro Minute</span><button class="primary" data-rate="1">Weiter</button></div><div class="small" id="wzErr" style="margin-top:6px"></div>`;
+  } else {
+    body += `<div class="big">${s.opts.map(([v, t]) => `<button data-v="${v}" class="${w.a[s.id] === v ? 'sel' : ''}">${esc(t)}</button>`).join('')}</div>`;
+  }
+  $('wzBody').innerHTML = body;
+  const inp = $('wzRate');
+  if (inp) inp.focus({ preventScroll: true });
+}
+function wzAnswer(v) {
+  const w = read.wz;
+  const s = stepsFor(w.a)[w.i];
+  w.a[s.id] = v;
+  w.i += 1;
+  renderWz();
+}
+function wzRate() {
+  const v = Number($('wzRate').value);
+  if (!Number.isFinite(v) || $('wzRate').value === '' || v < 10 || v > 400) {
+    $('wzErr').textContent = 'Gib eine Frequenz zwischen 10 und 400 ein.';
+    return;
+  }
+  wzAnswer(String(Math.round(v)));
+}
+function gradeWz() {
+  const a = read.wz.a;
+  const ans = answersToForm(a, $('wzRhythm').value);
+  const g = grade(state.sig, state.sc, ans, 'rs');
+  const route = review(a, caseFacts(state.sig, state.sc));
+  finishRead(g, route);
+}
+
+// ----- step form (Notfallsanitäter)
+function showStep() {
+  for (const el of $('form').querySelectorAll('.fstep')) el.classList.toggle('hidden', Number(el.dataset.step) !== read.step);
+  dots($('stDots'), ST_STEPS, read.step);
+  $('stBack').disabled = read.step === 0;
+  $('stNext').textContent = read.step === ST_STEPS - 1 ? 'Auswerten' : 'Weiter';
+}
+function stepNext() {
+  if (read.step === 0 && !$('fRhythm').value) {
+    $('fRhythm').focus();
+    return;
+  }
+  if (read.step < ST_STEPS - 1) {
+    read.step += 1;
+    showStep();
+  } else gradeSteps();
+}
+function setFormDisabled(d) {
+  for (const el of $('form').querySelectorAll('select,input')) el.disabled = d;
+}
+function gradeSteps() {
   const ans = {
     rhythm: $('fRhythm').value,
     rate: $('fRate').value,
@@ -216,11 +389,66 @@ function doGrade() {
     qrs: $('fQrs').value,
     findings: [...$('fFind').querySelectorAll('input:checked')].map((c) => c.value),
   };
-  const g = grade(state.sig, state.sc, ans, level());
+  finishRead(grade(state.sig, state.sc, ans, level()), null);
+  setFormDisabled(true);
+}
+
+// ----- free text (Arzt, Experte)
+async function gradeFree() {
+  const text = $('freeText').value.trim();
+  $('freeErr').classList.add('hidden');
+  if (text.length < 8) {
+    $('freeHint').textContent = 'Schreibe zuerst Deinen Befund.';
+    return;
+  }
+  $('freeHint').innerHTML = '<span class="spin"></span>Claude bewertet den Befund ...';
+  $('freeGo').disabled = true;
+  try {
+    const ctxText = $('chkCtx').checked ? CONTEXT[state.sc.id] : undefined;
+    const b = await evaluate({ text, level: level(), fall: truthSummary(state.sig, state.sc, ctxText) });
+    const pct = Math.max(0, Math.min(100, Math.round(Number(b.punkte) || 0)));
+    $('result').innerHTML = freeResultHtml(b, pct);
+    afterGrade(pct);
+    $('freeText').disabled = true;
+    $('freeGo').classList.add('hidden');
+    $('freeAlt').classList.add('hidden');
+    $('freeHint').textContent = '';
+  } catch (e) {
+    showFreeErr(e.message);
+    if (e.kind === 'access_code') $('vCodeWrap').classList.remove('hidden');
+    $('freeHint').textContent = 'Der Text bleibt erhalten, Du kannst es erneut versuchen.';
+    $('freeGo').disabled = false;
+  }
+}
+
+function freeResultHtml(b, pct) {
+  const rows = (b.items || [])
+    .map(
+      (i) => `<div class="res-item"><div class="res-head"><span>${esc(i.aspekt)}</span><span class="verdict v-${esc(i.urteil)}">${esc(i.urteil)}</span></div>
+      <div class="cols"><div><span>Du hast geschrieben</span>${esc(i.gesagt)}</div><div><span>Erwartet</span>${esc(i.erwartet)}</div></div>
+      ${i.kommentar ? `<div class="small" style="margin-top:4px">${esc(i.kommentar)}</div>` : ''}</div>`,
+    )
+    .join('');
+  const invented = (b.erfunden || []).length
+    ? `<div class="res-item"><div class="res-head"><span>Nicht zum EKG passend</span></div><ul class="sol">${b.erfunden.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`
+    : '';
+  return `<div class="score">${pct} %</div><p style="margin:6px 0 10px">${esc(b.zusammenfassung)}</p>${rows}${invented}
+    <div class="res-item"><div class="res-head"><span>Musterbefund</span></div><blockquote>${esc(b.musterbefund)}</blockquote></div>
+    <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+}
+
+// ----- shared result
+function afterGrade(pct) {
   state.graded = true;
   setExplainAvail(true);
-  setFormDisabled(true);
-  record(state.sc.id, g.pct, 'read');
+  record(state.sc.id, pct, 'read');
+  $('result').classList.remove('hidden');
+  $('btnNext').classList.remove('hidden');
+  renderStats();
+  $('side').scrollTop = 0;
+}
+
+function finishRead(g, route) {
   const rows = g.items
     .map((i) => {
       let extra = '';
@@ -231,12 +459,15 @@ function doGrade() {
         <div class="small">Deine Antwort: ${esc(i.answer)}</div><div class="small">Richtig: ${esc(i.right)}</div>${extra}</div>`;
     })
     .join('');
-  $('result').innerHTML = `<div class="score">${g.pct} %</div><div class="small">${esc(state.sc.title)}</div>${rows}
+  const path = route
+    ? `<div class="res-item"><div class="res-head"><span>Dein Weg</span></div><ul class="route">${route
+        .map((r) => `<li><span class="mk ${r.ok ? 'ok' : 'bad'}" aria-label="${r.ok ? 'richtig' : 'falsch'}">${r.ok ? '✓' : '✗'}</span><span><b>${esc(r.label)}:</b> ${esc(r.mine)}${r.ok ? '' : `. Richtig wäre: ${esc(r.right)}`}<br><span class="small">${esc(r.why)}</span></span></li>`)
+        .join('')}</ul></div>`
+    : '';
+  $('result').innerHTML = `<div class="score">${g.pct} %</div><div class="small">${esc(state.sc.title)}</div>${path}${rows}
     <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
-  $('result').classList.remove('hidden');
-  $('btnNext').classList.remove('hidden');
-  $('btnGrade').classList.add('hidden');
-  renderStats();
+  if (read.mode === 'wz') $('modeWz').classList.add('hidden');
+  afterGrade(g.pct);
 }
 
 // ---------- Quiz ----------
@@ -438,7 +669,7 @@ function finishLive() {
 }
 
 function showContext() {
-  const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'voice' || state.tab === 'quiz');
+  const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'quiz');
   const t = CONTEXT[state.sc.id];
   if (on && t) {
     $('ctxBox').innerHTML = `<div class="panel-head" style="margin-bottom:6px"><h2>Fallgeschichte</h2></div><div>${esc(t)}</div>`;
@@ -546,10 +777,9 @@ function renderStats() {
   $('statline').innerHTML = `<span class="chip"><b>${s.done}</b> bearbeitet</span><span class="chip">Schnitt <b>${s.done ? s.avg + ' %' : '-'}</b></span><span class="chip"><b>${s.due}</b> fällig</span>`;
 }
 
-const GROUP = { read: 'befund', voice: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', blind: 'labor', cat: 'labor' };
+const GROUP = { read: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', blind: 'labor', cat: 'labor' };
 const GROUP_DEFAULT = { befund: 'read', quiz: 'quiz', live: 'live', fehler: 'fehler', labor: 'blind' };
-const PANELS = { read: 'panelRead', voice: 'panelVoice', quiz: 'panelQuiz', blind: 'panelBlind', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
-let lastBefund = 'read';
+const PANELS = { read: 'panelRead', quiz: 'panelQuiz', blind: 'panelBlind', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
 
 function setTab(tab) {
   const prev = state.tab;
@@ -558,19 +788,17 @@ function setTab(tab) {
     live.running = false;
     setMode('paper');
   }
-  if (prev === 'voice' && tab !== 'voice') voiceStop(true);
   const group = GROUP[tab];
-  if (group === 'befund') lastBefund = tab;
   for (const b of $('nav').querySelectorAll('button')) {
     if (b.dataset.group === group) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   }
-  $('subBefund').classList.toggle('hidden', group !== 'befund');
   $('subLabor').classList.toggle('hidden', group !== 'labor');
-  for (const [id, t] of [['tabRead', 'read'], ['tabVoice', 'voice'], ['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
+  for (const [id, t] of [['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
   for (const [t, id] of Object.entries(PANELS)) $(id).classList.toggle('hidden', t !== tab);
-  if (tab !== 'read' && tab !== 'voice' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
-  const trainer = tab === 'read' || tab === 'voice' || tab === 'quiz';
+  if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
+  const trainer = tab === 'read' || tab === 'quiz';
+  $('work').classList.toggle('single', tab === 'cat');
   $('wLevel').classList.toggle('hidden', !trainer);
   $('wCat').classList.toggle('hidden', !trainer);
   $('wCtx').classList.toggle('hidden', !trainer);
@@ -578,7 +806,6 @@ function setTab(tab) {
   $('modeWrap').classList.toggle('hidden', noMode || tab === 'live');
   if (noMode) setMode('paper');
   if (tab === 'read') readCase();
-  else if (tab === 'voice') voiceCase();
   else if (tab === 'quiz') quizQuestion();
   else if (tab === 'blind') {
     setExplainAvail(false);
@@ -594,198 +821,15 @@ function setTab(tab) {
   }
 }
 
-// ---------- Laut befunden ----------
-const voice = { rec: null, busy: false, evaluated: false, status: null, blob: null };
-const GUIDE = {
-  rs: ['Rhythmus: regelmäßig oder unregelmäßig, Sinusrhythmus oder nicht', 'Frequenz pro Minute', 'Breiter oder schmaler Komplex', 'Auffälligstes Zeichen und was daraus folgt'],
-  notsan: ['Rhythmus und Frequenz', 'P-Welle vorhanden, Bezug zum QRS', 'QRS schmal oder breit', 'ST-Strecke: Hebung oder Senkung, in welchen Ableitungen', 'Gesamteindruck und nächster Schritt'],
-  arzt: ['Rhythmus, Frequenz, Regelmäßigkeit', 'Lagetyp', 'P-Welle und PQ-Zeit', 'QRS-Breite und Morphologie', 'ST-Strecke und T-Welle, regional zugeordnet', 'QT-Zeit', 'Zusammenfassende Beurteilung'],
-  experte: ['Rhythmus, Frequenz, Überleitung', 'Lagetyp und Hinweise auf Blöcke', 'P-Welle, PQ, QRS-Morphologie, Zeiten', 'ST-T je Region mit Spiegelbildern', 'Besonderheiten (Delta, Epsilon, U, Brugada und andere)', 'Differenzialdiagnosen', 'Klinische Konsequenz'],
-};
-const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
-
-function voiceGuide() {
-  $('vGuide').innerHTML = GUIDE[level()].map((t) => `<li>${esc(t)}</li>`).join('');
-}
-
-function setPill() {
-  const st = voice.status;
-  const pill = $('vPill');
-  pill.className = 'pill';
-  if (!st) {
-    pill.textContent = 'Server nicht erreichbar';
-    pill.classList.add('off');
-  } else if (!st.transcribe || !st.evaluate) {
-    pill.textContent = `Nicht eingerichtet: ${[!st.transcribe && 'Spracherkennung', !st.evaluate && 'Bewertung'].filter(Boolean).join(', ')}`;
-    pill.classList.add('off');
-  } else {
-    pill.textContent = 'Bereit';
-    pill.classList.add('on');
-  }
-  $('vCodeWrap').classList.toggle('hidden', !(st && st.needsCode));
-}
-
-async function voiceCase() {
-  voiceStop(true);
-  newCase();
-  setExplainAvail(false);
-  showContext();
-  voiceGuide();
-  voice.evaluated = false;
-  $('vText').value = '';
-  $('vText').disabled = false;
-  $('vEval').disabled = false;
-  $('vEval').classList.remove('hidden');
-  $('vNew').classList.add('hidden');
-  $('vResult').classList.add('hidden');
-  $('vErr').classList.add('hidden');
-  $('vHint').textContent = '';
-  $('vTimer').textContent = '0:00';
-  $('vState').textContent = micSupported() ? 'Bereit. Zum Starten auf das Mikrofon tippen.' : 'Dieser Browser kann nicht aufnehmen. Tippe den Befund stattdessen ein.';
-  $('vRec').disabled = !micSupported();
-  voice.status = await apiStatus();
-  setPill();
-}
-
-function voiceError(msg) {
-  $('vErr').textContent = msg;
-  $('vErr').classList.remove('hidden');
-}
-
-function micMessage(e) {
-  if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) return 'Der Zugriff auf das Mikrofon wurde nicht erlaubt. Erlaube ihn in den Browsereinstellungen für diese Seite oder tippe den Befund ein.';
-  if (e && e.name === 'NotFoundError') return 'Es wurde kein Mikrofon gefunden. Tippe den Befund stattdessen ein.';
-  return 'Die Aufnahme konnte nicht gestartet werden. Tippe den Befund stattdessen ein.';
-}
-
-async function voiceToggle() {
-  if (voice.busy || voice.evaluated) return;
-  $('vErr').classList.add('hidden');
-  if (voice.rec) {
-    await voiceStop(false);
-    return;
-  }
-  try {
-    voice.rec = await startRecording({
-      onLevel: (v) => ($('vMeter').style.width = `${Math.round(v * 100)}%`),
-      onTick: (s) => ($('vTimer').textContent = fmtTime(s)),
-      onAutoStop: () => voiceStop(false),
-    });
-  } catch (e) {
-    voice.rec = null;
-    voiceError(micMessage(e));
-    return;
-  }
-  $('vRec').setAttribute('aria-pressed', 'true');
-  $('vRec').setAttribute('aria-label', 'Aufnahme beenden');
-  $('vState').textContent = `Aufnahme läuft (höchstens ${fmtTime(MAX_SECONDS)}). Zum Beenden erneut tippen.`;
-}
-
-// discard = true drops the recording without transcribing (case change, tab change)
-async function voiceStop(discard) {
-  const rec = voice.rec;
-  if (!rec) return;
-  voice.rec = null;
-  $('vRec').setAttribute('aria-pressed', 'false');
-  $('vRec').setAttribute('aria-label', 'Aufnahme starten');
-  $('vMeter').style.width = '0';
-  const blob = await rec.stop();
-  if (discard) return;
-  voice.blob = blob;
-  if (blob.size < 2000) {
-    $('vState').textContent = 'Die Aufnahme war zu kurz.';
-    return;
-  }
-  voice.busy = true;
-  $('vRec').disabled = true;
-  $('vState').innerHTML = '<span class="spin"></span>Wird in Text umgewandelt …';
-  try {
-    const text = await transcribe(blob);
-    const cur = $('vText').value.trim();
-    $('vText').value = cur ? `${cur} ${text}` : text;
-    $('vState').textContent = text ? 'Text erstellt. Prüfen, bei Bedarf korrigieren, dann auswerten.' : 'Es wurde nichts erkannt. Bitte noch einmal aufnehmen oder tippen.';
-  } catch (e) {
-    $('vState').textContent = 'Die Umwandlung ist fehlgeschlagen.';
-    voiceError(e.message + ' Du kannst den Befund auch eintippen.');
-  } finally {
-    voice.busy = false;
-    $('vRec').disabled = !micSupported() || voice.evaluated;
-  }
-}
-
-function renderVoiceResult(b) {
-  const pct = Math.max(0, Math.min(100, Math.round(Number(b.punkte) || 0)));
-  const rows = (b.items || [])
-    .map(
-      (i) => `<div class="res-item"><div class="res-head"><span>${esc(i.aspekt)}</span><span class="verdict v-${esc(i.urteil)}">${esc(i.urteil)}</span></div>
-      <div class="cols"><div><span>Du hast gesagt</span>${esc(i.gesagt)}</div><div><span>Erwartet</span>${esc(i.erwartet)}</div></div>
-      ${i.kommentar ? `<div class="small" style="margin-top:4px">${esc(i.kommentar)}</div>` : ''}</div>`,
-    )
-    .join('');
-  const invented = (b.erfunden || []).length
-    ? `<div class="res-item"><div class="res-head"><span>Nicht zum EKG passend</span></div><ul class="sol">${b.erfunden.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`
-    : '';
-  $('vResult').innerHTML = `<div class="score">${pct} %</div><p style="margin:6px 0 10px">${esc(b.zusammenfassung)}</p>${rows}${invented}
-    <div class="res-item"><div class="res-head"><span>Musterbefund</span></div><blockquote>${esc(b.musterbefund)}</blockquote></div>
-    <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
-  $('vResult').classList.remove('hidden');
-  return pct;
-}
-
-async function voiceEvaluate() {
-  if (voice.busy || voice.evaluated) return;
-  if (voice.rec) await voiceStop(false);
-  const text = $('vText').value.trim();
-  $('vErr').classList.add('hidden');
-  if (text.length < 8) {
-    $('vHint').textContent = 'Sprich oder tippe zuerst Deinen Befund.';
-    return;
-  }
-  $('vHint').textContent = '';
-  voice.busy = true;
-  $('vEval').disabled = true;
-  $('vState').innerHTML = '<span class="spin"></span>Claude bewertet den Befund …';
-  try {
-    const ctxText = $('chkCtx').checked ? CONTEXT[state.sc.id] : undefined;
-    const b = await evaluate({ transcript: text, level: level(), fall: truthSummary(state.sig, state.sc, ctxText) });
-    const pct = renderVoiceResult(b);
-    record(state.sc.id, pct, 'voice');
-    voice.evaluated = true;
-    setExplainAvail(true);
-    $('vText').disabled = true;
-    $('vRec').disabled = true;
-    $('vEval').classList.add('hidden');
-    $('vNew').classList.remove('hidden');
-    $('vState').textContent = 'Bewertung fertig.';
-    renderStats();
-    $('vResult').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  } catch (e) {
-    voiceError(e.message);
-    if (e.kind === 'access_code') $('vCodeWrap').classList.remove('hidden');
-    $('vState').textContent = 'Die Bewertung ist fehlgeschlagen. Der Text bleibt erhalten, Du kannst es erneut versuchen.';
-    $('vEval').disabled = false;
-  } finally {
-    voice.busy = false;
-  }
-}
-
 // ---------- events ----------
 $('nav').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   const g = b.dataset.group;
-  setTab(g === 'befund' ? lastBefund : GROUP_DEFAULT[g]);
+  setTab(GROUP_DEFAULT[g]);
 });
-$('tabRead').addEventListener('click', () => setTab('read'));
-$('tabVoice').addEventListener('click', () => setTab('voice'));
 $('tabBlind').addEventListener('click', () => setTab('blind'));
 $('tabCat').addEventListener('click', () => setTab('cat'));
-$('vRec').addEventListener('click', voiceToggle);
-$('vEval').addEventListener('click', voiceEvaluate);
-$('vNew').addEventListener('click', voiceCase);
-$('vClear').addEventListener('click', () => {
-  if (!voice.evaluated) $('vText').value = '';
-});
 $('vCode').addEventListener('change', (e) => setCode(e.target.value));
 $('btnLiveStart').addEventListener('click', startLive);
 $('btnLiveAns').addEventListener('click', liveAnswer);
@@ -809,25 +853,65 @@ $('btnBlindNext').addEventListener('click', () => {
   blindShow();
 });
 $('btnBlindStart').addEventListener('click', blindStart);
-$('btnCaliper').addEventListener('click', () => {
-  tools.caliper = !tools.caliper;
-  tools.pts = [];
-  $('btnCaliper').setAttribute('aria-pressed', String(tools.caliper));
-  redrawPaper();
-});
-$('btnExplain').addEventListener('click', () => {
-  if ($('btnExplain').disabled) return;
-  tools.explain = !tools.explain;
-  $('btnExplain').setAttribute('aria-pressed', String(tools.explain));
-  redrawPaper();
-});
-$('paper').addEventListener('click', (e) => {
-  if (!tools.caliper || !$('paper').querySelector('svg')) return;
+function placePoint(e) {
   if (tools.pts.length >= 2) tools.pts = [];
   tools.pts.push(svgPoint(e));
   drawCaliper();
+}
+zoomer = createZoom($('zoomView'), { onTap: (e) => tools.caliper && placePoint(e), allowDouble: () => !tools.caliper });
+$('btnCaliper').addEventListener('click', toggleCaliper);
+$('zCaliper').addEventListener('click', toggleCaliper);
+$('btnExplain').addEventListener('click', toggleExplain);
+$('zExplain').addEventListener('click', toggleExplain);
+$('btnZoom').addEventListener('click', openZoom);
+$('zClose').addEventListener('click', closeZoom);
+$('zIn').addEventListener('click', () => zoomer.zoomBy(1.5));
+$('zOut').addEventListener('click', () => zoomer.zoomBy(1 / 1.5));
+$('zReset').addEventListener('click', () => zoomer.reset());
+document.addEventListener('keydown', (e) => {
+  if (!zoomUi.open) return;
+  if (e.key === 'Escape') closeZoom();
+  else if (e.key === '+' || e.key === '=') zoomer.zoomBy(1.4);
+  else if (e.key === '-') zoomer.zoomBy(1 / 1.4);
+  else if (e.key === '0') zoomer.reset();
 });
-$('btnGrade').addEventListener('click', doGrade);
+$('paper').addEventListener('click', (e) => {
+  if (!$('paper').querySelector('svg')) return;
+  if (tools.caliper) placePoint(e);
+  else openZoom();
+});
+$('wzBody').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.v) wzAnswer(b.dataset.v);
+  else if (b.dataset.rate) wzRate();
+  else if (b.dataset.go) gradeWz();
+});
+$('wzBody').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'wzRate') wzRate();
+});
+$('wzBack').addEventListener('click', () => {
+  if (read.wz.i > 0) {
+    read.wz.i -= 1;
+    renderWz();
+  }
+});
+$('stNext').addEventListener('click', stepNext);
+$('stBack').addEventListener('click', () => {
+  if (read.step > 0) {
+    read.step -= 1;
+    showStep();
+  }
+});
+$('stFree').addEventListener('click', () => {
+  read.alt = false;
+  readCase();
+});
+$('freeGo').addEventListener('click', gradeFree);
+$('freeAlt').addEventListener('click', () => {
+  read.alt = true;
+  readCase();
+});
 $('btnNext').addEventListener('click', readCase);
 $('btnQNext').addEventListener('click', quizQuestion);
 $('opts').addEventListener('click', (e) => {
@@ -839,7 +923,10 @@ $('btnBlitz').addEventListener('click', () => {
   $('btnBlitz').setAttribute('aria-pressed', 'true');
   quizQuestion();
 });
-$('level').addEventListener('change', () => setTab(state.tab));
+$('level').addEventListener('change', () => {
+  read.alt = false;
+  setTab(state.tab);
+});
 $('cat').addEventListener('change', () => setTab(state.tab));
 function refresh() {
   if (state.tab === 'blind' || state.tab === 'fehler') redrawPaper();

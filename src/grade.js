@@ -110,3 +110,18 @@ export function truthSummary(sig, sc, context) {
     fallgeschichte: context || undefined,
   };
 }
+
+// Observable features of the case, used to check the single steps of the wizard.
+export function caseFacts(sig, sc) {
+  const truth = TRUTH[sc.id];
+  const m = measure(sig);
+  const arrest = truth.rhythm === 'vf' || truth.rhythm === 'asystole';
+  let regular = true;
+  if (!arrest && sig.sched && sig.sched.ventricular) {
+    const t = sig.sched.ventricular.map((b) => b.t).filter((x) => x > 0.2 && x < sig.duration - 0.3);
+    const d = t.slice(1).map((x, i) => x - t[i]);
+    if (d.length > 1) regular = (Math.max(...d) - Math.min(...d)) / (d.reduce((s, x) => s + x, 0) / d.length) <= 0.18;
+  }
+  const P = { sinus: 'each', avb2w: 'each', avb2m: 'each', af: 'none', flutter: 'saw', svt: 'none', junctional: 'none', avb3: 'dissociated', idiov: 'none', vt: 'none' };
+  return { rhythm: truth.rhythm, arrest, regular, qrsWide: m.qrsMs >= 120, p: P[truth.rhythm] ?? 'none', findings: truth.findings, rate: m.hr };
+}

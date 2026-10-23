@@ -41,7 +41,7 @@
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans); }
-.wrap { max-width: 1200px; margin: 0 auto; padding-block: 18px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.wrap { max-width: 1440px; margin: 0 auto; padding-block: 18px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .hidden { display: none !important; }
 h1, h2, h3 { margin: 0; font-weight: 600; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -135,27 +135,61 @@ ul.sol { margin: 6px 0 0; padding-left: 18px; }
 .cols span { display: block; color: var(--muted); font-size: 12px; }
 blockquote { margin: 8px 0 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--sunk); border-radius: 0 var(--rs) var(--rs) 0; }
 
-/* oral mode */
-.rec-row { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
-.rec { width: 72px; height: 72px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: none; }
-.rec svg { width: 28px; height: 28px; }
-.rec[aria-pressed="true"] { animation: pulse 1.4s ease-out infinite; }
-@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
-@media (prefers-reduced-motion: reduce) { .rec[aria-pressed="true"] { animation: none; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 35%, transparent); } }
-.meter { width: 160px; height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; margin-top: 8px; }
-.meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
-.timer { font: 500 22px var(--mono); }
-.pill { font: 12px var(--mono); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
-.pill.on { color: var(--ok); border-color: var(--ok); }
-.pill.off { color: var(--warn); border-color: var(--warn); }
-textarea { width: 100%; min-height: 150px; resize: vertical; line-height: 1.5; }
-.err { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: var(--rs); color: var(--ink); background: color-mix(in srgb, var(--warn) 10%, var(--card)); font-size: 14px; }
-details.guide { margin: 14px 0; font-size: 14px; }
+textarea { width: 100%; min-height: 170px; resize: vertical; line-height: 1.5; }
+.err { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: var(--rs); background: color-mix(in srgb, var(--warn) 10%, var(--card)); font-size: 14px; }
+details.guide { margin: 0 0 12px; font-size: 14px; }
 details.guide summary { cursor: pointer; color: var(--muted); }
 details.guide ol { margin: 8px 0 0; padding-left: 20px; }
 .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* work area: ECG left, task right on wide screens */
+.work { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-items: start; }
+.work > * { min-width: 0; }
+.work .panel { margin-top: 0; }
+.col-main > .note, .col-main > .panel { margin-top: 12px; }
+@media (min-width: 1280px) {
+  .work { grid-template-columns: minmax(0, 1fr) 420px; }
+  .col-side { position: sticky; top: 14px; max-height: calc(100vh - 28px); overflow-y: auto; }
+}
+.work.single { grid-template-columns: minmax(0, 1fr); }
+.work.single .col-side { display: none; }
+
+/* wizard */
+.dots { display: flex; gap: 6px; margin-bottom: 14px; }
+.dots i { height: 4px; flex: 1; border-radius: 2px; background: var(--line); }
+.dots i.done { background: var(--ink); }
+.dots i.cur { background: var(--accent); }
+.wq { font-size: 19px; line-height: 1.3; margin: 0 0 6px; font-weight: 600; }
+.wh { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+.big { display: grid; gap: 8px; }
+.big button { text-align: left; padding: 13px 15px; font-size: 15px; display: flex; justify-content: space-between; gap: 10px; align-items: center; }
+.big button::after { content: "\203A"; color: var(--muted); font-size: 20px; line-height: 1; }
+.big button.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--card)); }
+.numrow { display: flex; gap: 8px; align-items: center; }
+.numrow input { width: 120px; font-size: 22px; font-family: var(--mono); padding: 8px 10px; }
+.wnav { display: flex; gap: 8px; margin-top: 16px; align-items: center; }
+.sum { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+.sum span { font-size: 12.5px; background: var(--sunk); border-radius: 999px; padding: 2px 10px; color: var(--ink); }
+.lvl { display: inline-block; font: 12px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 1px 10px; margin-top: 6px; }
+.route { margin: 0; padding: 0; list-style: none; }
+.route li { display: grid; grid-template-columns: 20px 1fr; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.route li:last-child { border-bottom: 0; }
+.route .mk { font-weight: 700; }
+.fstep { display: grid; gap: 12px; }
+.fstep .row { grid-template-columns: 1fr; }
+
+/* zoom viewer */
+.zoom { position: fixed; inset: 0; z-index: 50; background: var(--paper); display: flex; flex-direction: column; }
+.zoom-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--card); padding-top: max(8px, env(safe-area-inset-top, 0px)); }
+.zoom-view { flex: 1; min-height: 0; touch-action: none; cursor: grab; background: #fff; }
+.zoom-view.grab { cursor: grabbing; }
+.zoom-view svg { display: block; width: 100%; height: 100%; user-select: none; }
+.zoom.cal .zoom-view { cursor: crosshair; }
+.zoom-note { padding: 6px 14px calc(8px + env(safe-area-inset-bottom, 0px)); font-size: 13px; color: var(--muted); background: var(--card); border-top: 1px solid var(--line); min-height: 34px; }
+.stage .zoomable { cursor: zoom-in; }
+.stage .zoomable.cal { cursor: crosshair; }
 
 /* catalogue */
 .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
@@ -187,7 +221,7 @@ th { color: var(--muted); font-weight: 500; }
       <svg viewBox="0 0 44 30" fill="none" aria-hidden="true"><rect x="0.5" y="0.5" width="43" height="29" rx="5" fill="var(--card)" stroke="var(--line)"/><path d="M4 16h8l3-8 4 16 3-12 3 4h4l2-3 2 3h7" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
       <div>
         <h1>EKG-Trainer</h1>
-        <p>Simulierte EKGs befunden, mündlich oder im Formular</p>
+        <p>Simulierte EKGs befunden, passend zum Niveau</p>
       </div>
     </div>
     <div class="stats" id="statline" aria-live="polite"></div>
@@ -200,10 +234,6 @@ th { color: var(--muted); font-weight: 500; }
     <button data-group="fehler">Fehlerquellen</button>
     <button data-group="labor">Labor</button>
   </nav>
-  <div class="subnav" id="subBefund" role="group" aria-label="Art der Befundung">
-    <button id="tabRead" aria-pressed="true">Formular</button>
-    <button id="tabVoice" aria-pressed="false">Laut sprechen</button>
-  </div>
   <div class="subnav hidden" id="subLabor" role="group" aria-label="Labor">
     <button id="tabBlind" aria-pressed="false">Blindtest</button>
     <button id="tabCat" aria-pressed="false">Katalog und Realismus</button>
@@ -243,6 +273,8 @@ th { color: var(--muted); font-weight: 500; }
     </details>
   </section>
 
+  <div class="work" id="work">
+    <div class="col-main">
   <section class="stage-card" aria-label="EKG">
     <div class="stage-bar">
       <span class="stage-title" id="stageInfo"></span>
@@ -252,6 +284,7 @@ th { color: var(--muted); font-weight: 500; }
           <button id="modeMonitor" class="tool" aria-pressed="false">Monitor</button>
           <span class="sep"></span>
         </span>
+        <button id="btnZoom" class="tool">Vergrößern</button>
         <button id="btnCaliper" class="tool" aria-pressed="false">Messzirkel</button>
         <button id="btnExplain" class="tool" aria-pressed="false">Erklärebene</button>
       </div>
@@ -264,73 +297,77 @@ th { color: var(--muted); font-weight: 500; }
   <div class="note" id="calRead"></div>
   <div class="panel hidden" id="ctxBox"></div>
 
+    </div>
+    <div class="col-side" id="side">
   <section id="panelRead" class="panel">
-    <div class="panel-head"><h2>Befund im Formular</h2><p>Rhythmus, Frequenz und Zusatzbefunde auswählen, dann auswerten. Gewertet wird gegen die Daten des Falls.</p></div>
-    <div class="form" id="form">
-      <div class="row">
-        <label>Rhythmus
-          <select id="fRhythm"></select>
-        </label>
-        <label>Frequenz pro Minute (Kammern)
-          <input type="number" id="fRate" min="0" max="400" inputmode="numeric">
-        </label>
-        <label id="wAxis">Lagetyp
-          <select id="fAxis"></select>
-        </label>
-        <label id="wQrs">QRS-Breite
-          <select id="fQrs"><option value="">bitte wählen</option><option value="narrow">schmal (unter 120 ms)</option><option value="wide">breit (120 ms und mehr)</option></select>
-        </label>
-      </div>
-      <fieldset>
-        <legend>Zusatzbefunde (nichts ankreuzen, wenn sonst unauffällig)</legend>
-        <div class="checks" id="fFind"></div>
-      </fieldset>
-    </div>
-    <div class="actions">
-      <button class="primary" id="btnGrade">Auswerten</button>
-      <button id="btnNext" class="hidden">Nächster Fall</button>
-      <span class="small" id="gradeHint"></span>
-    </div>
-    <div id="result" class="hidden" style="margin-top:16px"></div>
-  </section>
-
-  <section id="panelVoice" class="panel hidden">
     <div class="panel-head">
-      <h2>Laut befunden</h2>
-      <p>Sprich Deinen Befund frei, so wie bei einer Übergabe oder mündlichen Prüfung. Die Aufnahme wird in Text umgewandelt und von Claude gegen die Daten des Falls bewertet.</p>
+      <h2>Befunden</h2>
+      <span class="lvl" id="readTag"></span>
     </div>
-    <details class="guide">
-      <summary>Gliederung für den Befund</summary>
-      <ol id="vGuide"></ol>
-    </details>
-    <div class="rec-row">
-      <button id="vRec" class="rec" aria-pressed="false" aria-label="Aufnahme starten">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
-      </button>
-      <div>
-        <div class="timer" id="vTimer">0:00</div>
-        <div class="meter" aria-hidden="true"><i id="vMeter"></i></div>
+
+    <div id="modeWz" class="hidden">
+      <div class="dots" id="wzDots"></div>
+      <div id="wzBody"></div>
+      <div class="wnav"><button id="wzBack" class="quiet">Zurück</button></div>
+      <div class="sum" id="wzSum"></div>
+    </div>
+
+    <div id="modeSteps" class="hidden">
+      <div class="dots" id="stDots"></div>
+      <div class="form" id="form">
+        <div class="fstep" data-step="0">
+          <p class="wq">Rhythmus und Frequenz</p>
+          <label>Rhythmus
+            <select id="fRhythm"></select>
+          </label>
+          <label>Frequenz pro Minute (Kammern)
+            <input type="number" id="fRate" min="0" max="400" inputmode="numeric">
+          </label>
+        </div>
+        <div class="fstep hidden" data-step="1">
+          <p class="wq">Lagetyp und QRS</p>
+          <label>Lagetyp
+            <select id="fAxis"></select>
+          </label>
+          <label>QRS-Breite
+            <select id="fQrs"><option value="">bitte wählen</option><option value="narrow">schmal (unter 120 ms)</option><option value="wide">breit (120 ms und mehr)</option></select>
+          </label>
+        </div>
+        <div class="fstep hidden" data-step="2">
+          <p class="wq">Zusatzbefunde</p>
+          <fieldset>
+            <legend>Nichts ankreuzen, wenn sonst unauffällig</legend>
+            <div class="checks" id="fFind"></div>
+          </fieldset>
+        </div>
       </div>
-      <div>
-        <div class="small" id="vState">Bereit. Zum Starten auf das Mikrofon tippen.</div>
-        <div style="margin-top:6px"><span class="pill" id="vPill">Status wird geprüft</span></div>
+      <div class="wnav">
+        <button id="stBack" class="quiet">Zurück</button>
+        <button id="stNext" class="primary">Weiter</button>
+        <button id="stFree" class="quiet hidden">Freitext verwenden</button>
       </div>
     </div>
-    <label style="margin-top:16px" for="vText">Transkript (Du kannst es korrigieren oder auch direkt tippen)
-      <textarea id="vText" placeholder="Hier erscheint der gesprochene Text."></textarea>
-    </label>
-    <label id="vCodeWrap" class="hidden" style="margin-top:12px;max-width:320px">Zugangscode
-      <input type="password" id="vCode" autocomplete="off">
-    </label>
-    <div class="actions">
-      <button class="primary" id="vEval">Befund auswerten</button>
-      <button id="vClear">Text leeren</button>
-      <button id="vNew" class="hidden">Nächster Fall</button>
-      <span class="small" id="vHint"></span>
+
+    <div id="modeFree" class="hidden">
+      <p class="wh">Schreibe Deinen Befund in eigenen Worten. Abkürzungen und Stichpunkte sind in Ordnung. Claude liest heraus, was Du erkannt hast, und vergleicht es mit dem Fall.</p>
+      <details class="guide">
+        <summary>Gliederung für den Befund</summary>
+        <ol id="fGuide"></ol>
+      </details>
+      <textarea id="freeText" maxlength="6000" placeholder="Zum Beispiel: Sinusrhythmus, 72/min, Indifferenztyp, schmaler QRS, keine ST-Streckenveränderungen, ..."></textarea>
+      <label id="vCodeWrap" class="hidden" style="margin-top:12px;max-width:320px">Zugangscode
+        <input type="password" id="vCode" autocomplete="off">
+      </label>
+      <div class="actions">
+        <button id="freeGo" class="primary">Befund auswerten</button>
+        <button id="freeAlt" class="quiet">Stattdessen Schritt-Formular</button>
+        <span class="small" id="freeHint"></span>
+      </div>
+      <div id="freeErr" class="err hidden" role="alert"></div>
     </div>
-    <p class="small" style="margin-top:12px">Datenschutz: Die Aufnahme geht zur Umwandlung in Text an einen Spracherkennungsdienst, der Text zur Bewertung an Claude (Anthropic). Es werden keine Daten von Patienten verwendet, alle EKGs sind simuliert.</p>
-    <div id="vErr" class="err hidden" role="alert"></div>
-    <div id="vResult" class="hidden" style="margin-top:16px"></div>
+
+    <div id="result" class="hidden" style="margin-top:16px"></div>
+    <div class="actions"><button id="btnNext" class="primary hidden">Nächster Fall</button></div>
   </section>
 
   <section id="panelQuiz" class="panel hidden">
@@ -386,6 +423,9 @@ th { color: var(--muted); font-weight: 500; }
     <div id="liveRes" class="hidden" style="margin-top:14px"></div>
   </section>
 
+    </div>
+  </div>
+
   <div id="panelCat" class="grid hidden">
     <div class="panel">
       <div class="panel-head"><h2>Realismus-Check</h2><p>Gemessen im Signal bei 10 mm/mV.</p></div>
@@ -411,6 +451,23 @@ th { color: var(--muted); font-weight: 500; }
     <button id="btnExport" class="quiet">Lernstand exportieren</button>
     <button id="btnReset" class="quiet">Lernstand löschen</button>
   </div>
+</div>
+<div id="zoom" class="zoom hidden" role="dialog" aria-modal="true" aria-label="EKG vergrößert">
+  <div class="zoom-bar">
+    <span class="stage-title" id="zoomInfo">Mausrad zoomt, Ziehen verschiebt, Doppelklick setzt zurück</span>
+    <div class="tools">
+      <button id="zOut" class="tool" aria-label="Verkleinern">-</button>
+      <button id="zIn" class="tool" aria-label="Vergrößern">+</button>
+      <button id="zReset" class="tool">Zurücksetzen</button>
+      <span class="sep"></span>
+      <button id="zCaliper" class="tool" aria-pressed="false">Messzirkel</button>
+      <button id="zExplain" class="tool" aria-pressed="false">Erklärebene</button>
+      <span class="sep"></span>
+      <button id="zClose" class="primary">Schließen</button>
+    </div>
+  </div>
+  <div class="zoom-view" id="zoomView"></div>
+  <div class="zoom-note" id="zoomRead"></div>
 </div>
 <script type="module" src="./app.js"></script>
 </body>
