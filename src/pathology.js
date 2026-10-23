@@ -30,7 +30,7 @@ function applyStemi(m, { territory, stage = 'acute', severity = 0.3 }) {
     qLoss(m, u, 0.4);
   } else if (stage === 'old') {
     m.t = add(m.t, scale(dir, -severity * 0.8));
-    qLoss(m, u, 1.2);
+    qLoss(m, u, 1.8);
   }
 }
 
