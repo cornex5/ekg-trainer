@@ -4,13 +4,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>EKG-Trainer Prototyp</title>
+<meta name="description" content="EKG-Trainer: realistische simulierte EKGs befunden, mündlich oder per Formular, mit Auswertung und Wiederholung.">
+<title>EKG-Trainer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root {
   --paper: #f3f0ea;
   --card: #fffdf9;
+  --sunk: #ece8df;
   --ink: #171a1d;
   --muted: #5d636a;
   --line: #d9d3c7;
@@ -18,97 +20,197 @@
   --accent-ink: #ffffff;
   --ok: #1f6b3a;
   --warn: #9a5b00;
+  --bad: #a8201a;
   --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
   --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --r: 6px;
+  --r: 10px;
+  --rs: 6px;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
-    --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+    --paper: #14161a; --card: #1c1f24; --sunk: #23272d; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+    --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a; --bad: #ef7a73;
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
-  --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+  --paper: #14161a; --card: #1c1f24; --sunk: #23272d; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+  --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a; --bad: #ef7a73;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
-.wrap { max-width: 1240px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
-.sub { color: var(--muted); margin: 0 0 16px; }
-.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; margin-bottom: 14px; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1200px; margin: 0 auto; padding-block: 18px 56px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.hidden { display: none !important; }
+h1, h2, h3 { margin: 0; font-weight: 600; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* header */
+.top { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand svg { width: 44px; height: 30px; flex: none; }
+.brand h1 { font-size: 20px; letter-spacing: -0.01em; line-height: 1.2; }
+.brand p { margin: 0; color: var(--muted); font-size: 13px; }
+.stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { font: 12.5px var(--mono); color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; }
+.chip b { color: var(--ink); font-weight: 500; }
+
+/* navigation */
+.nav { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.nav::-webkit-scrollbar { display: none; }
+.nav button { border: 0; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 10px 14px; font-weight: 500; white-space: nowrap; margin-bottom: -1px; }
+.nav button:hover { color: var(--ink); }
+.nav button[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); }
+.subnav { display: inline-flex; margin: 14px 0 0; background: var(--sunk); border-radius: 8px; padding: 3px; gap: 2px; }
+.subnav button { border: 0; background: none; color: var(--muted); padding: 6px 14px; border-radius: 6px; font-weight: 500; }
+.subnav button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 0 0 1px var(--line); }
+
+/* controls */
+button { font: inherit; padding: 7px 13px; border-radius: var(--rs); border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+button:hover:not(:disabled) { border-color: var(--muted); }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 500; }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); border-color: var(--accent); }
+button.quiet { border-color: transparent; background: none; color: var(--muted); }
+button.tool[aria-pressed="true"] { background: var(--ink); color: var(--card); border-color: var(--ink); }
 label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
-select, input[type=range], button { font: inherit; }
-select { padding: 6px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); min-width: 190px; }
-button { padding: 7px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
-button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
-.stage { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; overflow-x: auto; }
+select, input[type=number], input[type=text], input[type=password], textarea { font: inherit; padding: 7px 9px; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: var(--rs); min-width: 0; }
+select { min-width: 190px; }
+
+.ctrl { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; margin: 14px 0; }
+.more { flex: 1 1 100%; }
+.more summary { cursor: pointer; color: var(--muted); font-size: 13px; width: max-content; padding: 2px 0; }
+.more summary:hover { color: var(--ink); }
+.more-grid { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: end; margin-top: 10px; padding: 12px 14px; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); }
+.check { display: flex; gap: 8px; align-items: center; color: var(--ink); font-size: 14px; }
+
+/* ECG stage */
+.stage-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.stage-bar { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.stage-title { font: 12.5px var(--mono); color: var(--muted); }
+.tools { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tools .sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.tools button { padding: 4px 11px; font-size: 13px; }
+.stage { padding: 10px; overflow-x: auto; }
 .stage svg { display: block; width: 100%; min-width: 760px; height: auto; border-radius: 4px; }
 .stage canvas { display: block; width: 100%; height: auto; border-radius: 4px; background: #05080a; }
-.grid > * { min-width: 0; }
+.stage svg.cal { cursor: crosshair; }
+.note { color: var(--muted); font-size: 13px; margin: 8px 2px 0; min-height: 0; }
+.note:empty { display: none; }
+
+/* panels */
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 18px 20px; margin-top: 14px; }
+.panel-head { margin-bottom: 14px; }
+.panel-head h2 { font-size: 17px; }
+.panel-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; max-width: 70ch; }
+.small { font-size: 13px; color: var(--muted); }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+.form { display: grid; gap: 14px; }
+.form .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+.form select, .form input[type=number] { width: 100%; }
+fieldset { border: 1px solid var(--line); border-radius: var(--rs); padding: 10px 12px; margin: 0; min-width: 0; }
+legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 3px 14px; }
+.checks label { display: flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ink); }
+.q { font-size: 17px; margin: 0 0 12px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px; }
+.opts button { text-align: left; padding: 11px 13px; }
+.opts button.right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 15%, var(--card)); }
+.opts button.wrong { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 15%, var(--card)); }
+.ok { color: var(--ok); }
+.bad { color: var(--warn); }
+.fb { margin-top: 14px; padding: 12px 14px; background: var(--sunk); border-radius: var(--rs); }
+ul.sol { margin: 6px 0 0; padding-left: 18px; }
+
+/* results */
+.score { font: 600 34px/1.1 var(--mono); color: var(--accent); }
+.res-item { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.res-item:last-child { border-bottom: 0; }
+.res-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 500; align-items: baseline; }
+.verdict { font: 12px var(--mono); padding: 1px 8px; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+.v-richtig { color: var(--ok); } .v-teilweise { color: var(--warn); } .v-falsch, .v-fehlt { color: var(--bad); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 4px 18px; margin-top: 4px; }
+.cols div { font-size: 13.5px; }
+.cols span { display: block; color: var(--muted); font-size: 12px; }
+blockquote { margin: 8px 0 0; padding: 10px 14px; border-left: 3px solid var(--accent); background: var(--sunk); border-radius: 0 var(--rs) var(--rs) 0; }
+
+/* oral mode */
+.rec-row { display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
+.rec { width: 72px; height: 72px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--accent); border-color: var(--accent); color: var(--accent-ink); flex: none; }
+.rec svg { width: 28px; height: 28px; }
+.rec[aria-pressed="true"] { animation: pulse 1.4s ease-out infinite; }
+@keyframes pulse { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 50%, transparent); } 100% { box-shadow: 0 0 0 18px transparent; } }
+@media (prefers-reduced-motion: reduce) { .rec[aria-pressed="true"] { animation: none; box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 35%, transparent); } }
+.meter { width: 160px; height: 8px; background: var(--sunk); border-radius: 4px; overflow: hidden; margin-top: 8px; }
+.meter i { display: block; height: 100%; width: 0; background: var(--ok); transition: width .08s linear; }
+.timer { font: 500 22px var(--mono); }
+.pill { font: 12px var(--mono); padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.pill.on { color: var(--ok); border-color: var(--ok); }
+.pill.off { color: var(--warn); border-color: var(--warn); }
+textarea { width: 100%; min-height: 150px; resize: vertical; line-height: 1.5; }
+.err { margin-top: 12px; padding: 10px 14px; border: 1px solid var(--warn); border-radius: var(--rs); color: var(--ink); background: color-mix(in srgb, var(--warn) 10%, var(--card)); font-size: 14px; }
+details.guide { margin: 14px 0; font-size: 14px; }
+details.guide summary { cursor: pointer; color: var(--muted); }
+details.guide ol { margin: 8px 0 0; padding-left: 20px; }
+.spin { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
+/* catalogue */
 .grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
+.grid > * { min-width: 0; }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
-.card h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+.grid .panel { margin-top: 0; }
+.kv { display: flex; gap: 18px; flex-wrap: wrap; font: 13px var(--mono); margin-bottom: 8px; }
+.kv b { font-weight: 500; color: var(--accent); }
 table { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
 th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
 th:first-child, td:first-child { text-align: left; }
 th { color: var(--muted); font-weight: 500; }
-.kv { display: flex; gap: 18px; flex-wrap: wrap; font: 13px var(--mono); margin-bottom: 8px; }
-.kv b { font-weight: 500; color: var(--accent); }
-.note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
-ul.sol { margin: 0; padding-left: 18px; }
-.hidden { display: none !important; }
-.tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
-.tabs button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.statline { color: var(--muted); font: 13px var(--mono); margin-bottom: 12px; }
-.form { display: grid; gap: 12px; }
-.form .row { display: flex; flex-wrap: wrap; gap: 12px; }
-.form select, .form input[type=number] { min-width: 0; width: 100%; }
-.form input[type=number] { padding: 6px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); font: inherit; }
-.form .col { flex: 1 1 200px; min-width: 0; }
-fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; margin: 0; min-width: 0; }
-legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
-.checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 2px 14px; }
-.checks label { display: flex; gap: 6px; align-items: center; font-size: 14px; color: var(--ink); }
-.res-item { padding: 8px 0; border-bottom: 1px solid var(--line); }
-.res-item:last-child { border-bottom: 0; }
-.res-head { display: flex; justify-content: space-between; gap: 10px; font-weight: 500; }
-.ok { color: var(--ok); }
-.bad { color: var(--warn); }
-.score { font: 600 28px var(--mono); color: var(--accent); }
-.q { font-size: 17px; margin: 0 0 10px; }
-.opts { display: grid; gap: 8px; }
-.opts button { text-align: left; padding: 10px 12px; }
-.opts button.right { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 16%, var(--card)); }
-.opts button.wrong { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, var(--card)); }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
-.small { font-size: 13px; color: var(--muted); }
-.stage svg.cal { cursor: crosshair; }
 
+.foot { margin-top: 24px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; color: var(--muted); font-size: 13px; }
+.foot textarea { font: 12px var(--mono); min-height: 0; }
+
+@media (max-width: 600px) {
+  .panel { padding: 14px; }
+  select { min-width: 0; width: 100%; }
+  .ctrl > label { flex: 1 1 100%; }
+  .brand p { display: none; }
+}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>EKG-Trainer</h1>
-  <p class="sub">Alle Kurven werden live aus einem Reizleitungs- und Herzvektor-Modell erzeugt, nichts davon ist eine gespeicherte Aufnahme.</p>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 44 30" fill="none" aria-hidden="true"><rect x="0.5" y="0.5" width="43" height="29" rx="5" fill="var(--card)" stroke="var(--line)"/><path d="M4 16h8l3-8 4 16 3-12 3 4h4l2-3 2 3h7" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>EKG-Trainer</h1>
+        <p>Simulierte EKGs befunden, mündlich oder im Formular</p>
+      </div>
+    </div>
+    <div class="stats" id="statline" aria-live="polite"></div>
+  </header>
 
-  <div class="tabs">
-    <button id="tabRead" aria-pressed="true">Befunden</button>
-    <button id="tabQuiz" aria-pressed="false">Quiz</button>
-    <button id="tabBlind" aria-pressed="false">Blindtest</button>
-    <button id="tabFehler" aria-pressed="false">Fehlerquellen</button>
-    <button id="tabLive" aria-pressed="false">Monitor live</button>
-    <button id="tabCat" aria-pressed="false">Katalog und Realismus-Check</button>
+  <nav class="nav" id="nav" aria-label="Bereiche">
+    <button data-group="befund">Befunden</button>
+    <button data-group="quiz">Quiz</button>
+    <button data-group="live">Monitor live</button>
+    <button data-group="fehler">Fehlerquellen</button>
+    <button data-group="labor">Labor</button>
+  </nav>
+  <div class="subnav" id="subBefund" role="group" aria-label="Art der Befundung">
+    <button id="tabRead" aria-pressed="true">Formular</button>
+    <button id="tabVoice" aria-pressed="false">Laut sprechen</button>
   </div>
-  <div class="statline" id="statline"></div>
+  <div class="subnav hidden" id="subLabor" role="group" aria-label="Labor">
+    <button id="tabBlind" aria-pressed="false">Blindtest</button>
+    <button id="tabCat" aria-pressed="false">Katalog und Realismus</button>
+  </div>
 
-  <div class="bar">
-    <label>Niveau
+  <section class="ctrl" id="ctrl">
+    <label id="wLevel">Niveau
       <select id="level">
         <option value="rs">Rettungssanitäter</option>
         <option value="notsan">Notfallsanitäter</option>
@@ -116,67 +218,66 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
         <option value="experte">Kardiologie / Experte</option>
       </select>
     </label>
-    <label>Kategorie
+    <label id="wCat">Kategorie
       <select id="cat"></select>
     </label>
-    <label>Störungen
-      <select id="noise">
-        <option value="none">keine</option>
-        <option value="low" selected>gering</option>
-        <option value="medium">mittel</option>
-        <option value="high">stark (Wackeln, Brummen)</option>
-      </select>
-    </label>
-    <label>Papiergeschwindigkeit
-      <select id="speed"><option value="25" selected>25 mm/s</option><option value="50">50 mm/s</option></select>
-    </label>
-    <label>Verstärkung
-      <select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select>
-    </label>
-    <label>Darstellung
-      <span>
-        <button id="modePaper" aria-pressed="true">Papier 12-Kanal</button>
-        <button id="modeMonitor" aria-pressed="false">Monitor live</button>
-      </span>
-    </label>
-    <label>Fallgeschichte
-      <span><label style="display:flex;gap:6px;align-items:center;color:var(--ink);font-size:14px"><input type="checkbox" id="chkCtx"> anzeigen</label></span>
-    </label>
-    <label>Werkzeuge
-      <span>
-        <button id="btnCaliper" aria-pressed="false">Messzirkel</button>
-        <button id="btnExplain" aria-pressed="false">Erklärebene</button>
-      </span>
-    </label>
-    <label id="scenWrap" class="hidden">Fall
-      <select id="scenario"></select>
-    </label>
-    <button id="reseed" class="primary hidden">Neue Variation</button>
-    <button id="solToggle" aria-pressed="false" class="hidden">Lösung zeigen</button>
-  </div>
+    <details class="more">
+      <summary>Anzeige und Störungen</summary>
+      <div class="more-grid">
+        <label>Störungen
+          <select id="noise">
+            <option value="none">keine</option>
+            <option value="low" selected>gering</option>
+            <option value="medium">mittel</option>
+            <option value="high">stark (Wackeln, Brummen)</option>
+          </select>
+        </label>
+        <label>Papiergeschwindigkeit
+          <select id="speed"><option value="25" selected>25 mm/s</option><option value="50">50 mm/s</option></select>
+        </label>
+        <label>Verstärkung
+          <select id="gain"><option value="5">5 mm/mV</option><option value="10" selected>10 mm/mV</option><option value="20">20 mm/mV</option></select>
+        </label>
+        <label class="check" id="wCtx"><input type="checkbox" id="chkCtx"> Fallgeschichte anzeigen</label>
+      </div>
+    </details>
+  </section>
 
-  <div class="stage">
-    <div id="paper"></div>
-    <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
-  </div>
-
+  <section class="stage-card" aria-label="EKG">
+    <div class="stage-bar">
+      <span class="stage-title" id="stageInfo"></span>
+      <div class="tools">
+        <span id="modeWrap" class="tools">
+          <button id="modePaper" class="tool" aria-pressed="true">Papier</button>
+          <button id="modeMonitor" class="tool" aria-pressed="false">Monitor</button>
+          <span class="sep"></span>
+        </span>
+        <button id="btnCaliper" class="tool" aria-pressed="false">Messzirkel</button>
+        <button id="btnExplain" class="tool" aria-pressed="false">Erklärebene</button>
+      </div>
+    </div>
+    <div class="stage">
+      <div id="paper"></div>
+      <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
+    </div>
+  </section>
   <div class="note" id="calRead"></div>
-  <div class="card hidden" id="ctxBox" style="margin-top:14px"></div>
+  <div class="panel hidden" id="ctxBox"></div>
 
-  <div id="panelRead" class="card" style="margin-top:14px">
-    <h2>Befund</h2>
+  <section id="panelRead" class="panel">
+    <div class="panel-head"><h2>Befund im Formular</h2><p>Rhythmus, Frequenz und Zusatzbefunde auswählen, dann auswerten. Gewertet wird gegen die Daten des Falls.</p></div>
     <div class="form" id="form">
       <div class="row">
-        <label class="col">Rhythmus
+        <label>Rhythmus
           <select id="fRhythm"></select>
         </label>
-        <label class="col">Frequenz pro Minute (Kammern)
+        <label>Frequenz pro Minute (Kammern)
           <input type="number" id="fRate" min="0" max="400" inputmode="numeric">
         </label>
-        <label class="col" id="wAxis">Lagetyp
+        <label id="wAxis">Lagetyp
           <select id="fAxis"></select>
         </label>
-        <label class="col" id="wQrs">QRS-Breite
+        <label id="wQrs">QRS-Breite
           <select id="fQrs"><option value="">bitte wählen</option><option value="narrow">schmal (unter 120 ms)</option><option value="wide">breit (120 ms und mehr)</option></select>
         </label>
       </div>
@@ -190,75 +291,126 @@ legend { font-size: 12px; color: var(--muted); padding: 0 4px; }
       <button id="btnNext" class="hidden">Nächster Fall</button>
       <span class="small" id="gradeHint"></span>
     </div>
-    <div id="result" class="hidden" style="margin-top:12px"></div>
-  </div>
+    <div id="result" class="hidden" style="margin-top:16px"></div>
+  </section>
 
-  <div id="panelQuiz" class="card hidden" style="margin-top:14px">
-    <h2 id="quizHead">Quiz</h2>
+  <section id="panelVoice" class="panel hidden">
+    <div class="panel-head">
+      <h2>Laut befunden</h2>
+      <p>Sprich Deinen Befund frei, so wie bei einer Übergabe oder mündlichen Prüfung. Die Aufnahme wird in Text umgewandelt und von Claude gegen die Daten des Falls bewertet.</p>
+    </div>
+    <details class="guide">
+      <summary>Gliederung für den Befund</summary>
+      <ol id="vGuide"></ol>
+    </details>
+    <div class="rec-row">
+      <button id="vRec" class="rec" aria-pressed="false" aria-label="Aufnahme starten">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <div>
+        <div class="timer" id="vTimer">0:00</div>
+        <div class="meter" aria-hidden="true"><i id="vMeter"></i></div>
+      </div>
+      <div>
+        <div class="small" id="vState">Bereit. Zum Starten auf das Mikrofon tippen.</div>
+        <div style="margin-top:6px"><span class="pill" id="vPill">Status wird geprüft</span></div>
+      </div>
+    </div>
+    <label style="margin-top:16px" for="vText">Transkript (Du kannst es korrigieren oder auch direkt tippen)
+      <textarea id="vText" placeholder="Hier erscheint der gesprochene Text."></textarea>
+    </label>
+    <label id="vCodeWrap" class="hidden" style="margin-top:12px;max-width:320px">Zugangscode
+      <input type="password" id="vCode" autocomplete="off">
+    </label>
+    <div class="actions">
+      <button class="primary" id="vEval">Befund auswerten</button>
+      <button id="vClear">Text leeren</button>
+      <button id="vNew" class="hidden">Nächster Fall</button>
+      <span class="small" id="vHint"></span>
+    </div>
+    <p class="small" style="margin-top:12px">Datenschutz: Die Aufnahme geht zur Umwandlung in Text an einen Spracherkennungsdienst, der Text zur Bewertung an Claude (Anthropic). Es werden keine Daten von Patienten verwendet, alle EKGs sind simuliert.</p>
+    <div id="vErr" class="err hidden" role="alert"></div>
+    <div id="vResult" class="hidden" style="margin-top:16px"></div>
+  </section>
+
+  <section id="panelQuiz" class="panel hidden">
+    <div class="panel-head"><h2 id="quizHead">Quiz</h2></div>
     <p class="q">Welche Diagnose passt zu diesem EKG?</p>
     <div class="opts" id="opts"></div>
-    <div id="quizFb" class="hidden" style="margin-top:10px"></div>
+    <div id="quizFb" class="fb hidden"></div>
     <div class="actions">
       <button id="btnQNext" class="primary hidden">Weiter</button>
-      <button id="btnBlitz" aria-pressed="false">Blitz: 10 Fälle</button>
+      <button id="btnBlitz" aria-pressed="false" class="tool">Blitz: 10 Fälle</button>
       <span class="small" id="quizHint"></span>
     </div>
-  </div>
+  </section>
 
-  <div id="panelBlind" class="card hidden" style="margin-top:14px">
-    <h2 id="blindHead">Blindtest: echt oder simuliert?</h2>
-    <p class="small" id="blindIntro">Zehn echte normale EKGs aus der offenen Datenbank PTB-XL und zehn simulierte, gemischt. Beide sind gleich gerendert und gleich abgetastet. Entscheide bei jedem, ob es eine echte Aufnahme ist. Liegt Deine Trefferquote nahe 50 Prozent, ist die Simulation nicht von echt zu unterscheiden.</p>
-    <div class="actions">
+  <section id="panelBlind" class="panel hidden">
+    <div class="panel-head">
+      <h2 id="blindHead">Blindtest: echt oder simuliert?</h2>
+      <p id="blindIntro">Zehn echte normale EKGs aus der offenen Datenbank PTB-XL und zehn simulierte, gemischt. Beide sind gleich gerendert und gleich abgetastet. Entscheide bei jedem, ob es eine echte Aufnahme ist. Liegt Deine Trefferquote nahe 50 Prozent, ist die Simulation nicht von echt zu unterscheiden.</p>
+    </div>
+    <div class="actions" style="margin-top:0">
       <button id="btnBlindReal" class="primary">Echt</button>
       <button id="btnBlindSim">Simuliert</button>
       <button id="btnBlindNext" class="hidden">Weiter</button>
-      <button id="btnBlindStart">Neu starten</button>
+      <button id="btnBlindStart" class="quiet">Neu starten</button>
       <span class="small" id="blindHint"></span>
     </div>
-    <div id="blindFb" class="hidden" style="margin-top:10px"></div>
-  </div>
+    <div id="blindFb" class="fb hidden"></div>
+  </section>
 
-  <div id="panelFehler" class="card hidden" style="margin-top:14px">
-    <h2>Was ist an dieser Ableitung falsch?</h2>
+  <section id="panelFehler" class="panel hidden">
+    <div class="panel-head"><h2>Was ist an dieser Ableitung falsch?</h2><p>Technische Fehler erkennen, bevor man das EKG interpretiert.</p></div>
     <div class="opts" id="errOpts"></div>
-    <div id="errFb" class="hidden" style="margin-top:10px"></div>
+    <div id="errFb" class="fb hidden"></div>
     <div class="actions">
       <button id="btnErrNext" class="primary hidden">Weiter</button>
       <span class="small" id="errHint"></span>
     </div>
-  </div>
+  </section>
 
-  <div id="panelLive" class="card hidden" style="margin-top:14px">
-    <h2>Monitor live: Rhythmus ansagen</h2>
-    <div class="actions" style="margin-top:0">
+  <section id="panelLive" class="panel hidden">
+    <div class="panel-head"><h2>Monitor live: Rhythmus ansagen</h2><p id="liveIntro">Der Monitor läuft durch mehrere Rhythmen ohne Ankündigung. Sage jeden neuen Rhythmus an, sobald Du ihn erkennst. Gewertet wird die erste richtige Ansage je Abschnitt, mit Reaktionszeit.</p></div>
+    <div class="actions" style="margin-top:0;align-items:end">
       <label>Szenario
         <select id="liveStory"></select>
       </label>
       <button class="primary" id="btnLiveStart">Start</button>
     </div>
-    <p class="small" id="liveIntro">Der Monitor läuft durch mehrere Rhythmen ohne Ankündigung. Sage jeden neuen Rhythmus an, sobald Du ihn erkennst. Gewertet wird die erste richtige Ansage je Abschnitt, mit Reaktionszeit.</p>
     <div class="actions" id="liveCtl">
       <select id="liveAns"></select>
       <button id="btnLiveAns" class="primary">Ansagen</button>
       <span class="small" id="liveLog"></span>
     </div>
-    <div id="liveRes" class="hidden" style="margin-top:12px"></div>
-  </div>
+    <div id="liveRes" class="hidden" style="margin-top:14px"></div>
+  </section>
 
   <div id="panelCat" class="grid hidden">
-    <div class="card">
-      <h2>Realismus-Check (gemessen im Signal, 10 mm/mV)</h2>
+    <div class="panel">
+      <div class="panel-head"><h2>Realismus-Check</h2><p>Gemessen im Signal bei 10 mm/mV.</p></div>
+      <div class="actions" style="margin:0 0 12px;align-items:end">
+        <label>Fall
+          <select id="scenario"></select>
+        </label>
+        <button id="reseed" class="primary">Neue Variation</button>
+        <button id="solToggle" class="tool" aria-pressed="false">Lösung zeigen</button>
+      </div>
       <div class="kv" id="kv"></div>
       <table id="tbl"></table>
       <p class="note" id="rangeNote"></p>
     </div>
-    <div class="card">
-      <h2>Lösung</h2>
-      <div id="solHidden" class="note">Verborgen. Erst befunden, dann aufdecken.</div>
+    <div class="panel">
+      <div class="panel-head"><h2>Lösung</h2></div>
+      <div id="solHidden" class="small">Verborgen. Erst befunden, dann aufdecken.</div>
       <ul class="sol hidden" id="sol"></ul>
     </div>
   </div>
-  <p class="note"><button id="btnExport">Lernstand exportieren</button> <button id="btnReset">Lernstand löschen</button></p>
+
+  <div class="foot">
+    <button id="btnExport" class="quiet">Lernstand exportieren</button>
+    <button id="btnReset" class="quiet">Lernstand löschen</button>
+  </div>
 </div>
 <script type="module" src="./app.js"></script>
 </body>

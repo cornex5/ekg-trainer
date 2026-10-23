@@ -6,10 +6,11 @@ import { mulberry32 } from './src/rng.js';
 import { RHYTHMS, AXES, FINDINGS, TRUTH } from './src/truth.js';
 import { CONTEXT } from './src/context.js';
 import { LIVE, SEG_SECONDS } from './src/livescen.js';
-import { grade } from './src/grade.js';
+import { grade, truthSummary } from './src/grade.js';
 import { ERRORS, applyError, NOISE_FOR } from './src/errors.js';
 import { makeBlindSet } from './src/blind.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
+import { apiStatus, transcribe, evaluate, startRecording, micSupported, getCode, setCode, MAX_SECONDS } from './src/voice.js';
 
 const $ = (id) => document.getElementById(id);
 const LEVELS = ['rs', 'notsan', 'arzt', 'experte'];
@@ -50,9 +51,8 @@ $('fFind').innerHTML = Object.entries(FINDINGS)
 function fillScenarios() {
   const sel = $('scenario');
   sel.innerHTML = '';
-  const max = LEVELS.indexOf(level());
   CATEGORIES.forEach((cat, ci) => {
-    const list = SCENARIOS.filter((s) => s.cat === ci && LEVELS.indexOf(s.level) <= max);
+    const list = SCENARIOS.filter((s) => s.cat === ci);
     if (!list.length) return;
     const g = document.createElement('optgroup');
     g.label = cat;
@@ -92,7 +92,13 @@ function marksFor(sig) {
   return out;
 }
 
+function updateStageInfo() {
+  const mon = state.mode === 'monitor';
+  $('stageInfo').textContent = mon ? `Monitor, Ableitung II · ${$('gain').value} mm/mV` : `12 Ableitungen · ${$('speed').value} mm/s · ${$('gain').value} mm/mV`;
+}
+
 function redrawPaper() {
+  updateStageInfo();
   if (!state.sig) return;
   const marks = tools.explain && state.tab !== 'blind' ? marksFor(state.sig) : [];
   $('paper').innerHTML = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value), marks });
@@ -432,10 +438,10 @@ function finishLive() {
 }
 
 function showContext() {
-  const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'quiz');
+  const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'voice' || state.tab === 'quiz');
   const t = CONTEXT[state.sc.id];
   if (on && t) {
-    $('ctxBox').innerHTML = `<h2>Fallgeschichte</h2><div>${esc(t)}</div>`;
+    $('ctxBox').innerHTML = `<div class="panel-head" style="margin-bottom:6px"><h2>Fallgeschichte</h2></div><div>${esc(t)}</div>`;
     $('ctxBox').classList.remove('hidden');
   } else $('ctxBox').classList.add('hidden');
 }
@@ -530,14 +536,20 @@ function setMode(mode) {
   $('monitor').classList.toggle('hidden', mode !== 'monitor');
   $('modePaper').setAttribute('aria-pressed', String(mode === 'paper'));
   $('modeMonitor').setAttribute('aria-pressed', String(mode === 'monitor'));
+  updateStageInfo();
   startMonitor();
 }
 
 // ---------- tabs and stats ----------
 function renderStats() {
   const s = stats();
-  $('statline').textContent = `Bearbeitet: ${s.done}   Schnitt: ${s.done ? s.avg + ' %' : '-'}   Fällig zur Wiederholung: ${s.due}`;
+  $('statline').innerHTML = `<span class="chip"><b>${s.done}</b> bearbeitet</span><span class="chip">Schnitt <b>${s.done ? s.avg + ' %' : '-'}</b></span><span class="chip"><b>${s.due}</b> fällig</span>`;
 }
+
+const GROUP = { read: 'befund', voice: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', blind: 'labor', cat: 'labor' };
+const GROUP_DEFAULT = { befund: 'read', quiz: 'quiz', live: 'live', fehler: 'fehler', labor: 'blind' };
+const PANELS = { read: 'panelRead', voice: 'panelVoice', quiz: 'panelQuiz', blind: 'panelBlind', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
+let lastBefund = 'read';
 
 function setTab(tab) {
   const prev = state.tab;
@@ -546,18 +558,27 @@ function setTab(tab) {
     live.running = false;
     setMode('paper');
   }
-  for (const [id, t] of [['tabRead', 'read'], ['tabQuiz', 'quiz'], ['tabBlind', 'blind'], ['tabFehler', 'fehler'], ['tabLive', 'live'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
-  $('panelRead').classList.toggle('hidden', tab !== 'read');
-  $('panelQuiz').classList.toggle('hidden', tab !== 'quiz');
-  $('panelBlind').classList.toggle('hidden', tab !== 'blind');
-  $('panelFehler').classList.toggle('hidden', tab !== 'fehler');
-  $('panelLive').classList.toggle('hidden', tab !== 'live');
-  if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
-  $('panelCat').classList.toggle('hidden', tab !== 'cat');
-  for (const id of ['scenWrap', 'reseed', 'solToggle']) $(id).classList.toggle('hidden', tab !== 'cat');
-  $('cat').parentElement.classList.toggle('hidden', tab === 'cat');
-  if (tab === 'blind' || tab === 'fehler') setMode('paper');
+  if (prev === 'voice' && tab !== 'voice') voiceStop(true);
+  const group = GROUP[tab];
+  if (group === 'befund') lastBefund = tab;
+  for (const b of $('nav').querySelectorAll('button')) {
+    if (b.dataset.group === group) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  }
+  $('subBefund').classList.toggle('hidden', group !== 'befund');
+  $('subLabor').classList.toggle('hidden', group !== 'labor');
+  for (const [id, t] of [['tabRead', 'read'], ['tabVoice', 'voice'], ['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
+  for (const [t, id] of Object.entries(PANELS)) $(id).classList.toggle('hidden', t !== tab);
+  if (tab !== 'read' && tab !== 'voice' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
+  const trainer = tab === 'read' || tab === 'voice' || tab === 'quiz';
+  $('wLevel').classList.toggle('hidden', !trainer);
+  $('wCat').classList.toggle('hidden', !trainer);
+  $('wCtx').classList.toggle('hidden', !trainer);
+  const noMode = tab === 'blind' || tab === 'fehler';
+  $('modeWrap').classList.toggle('hidden', noMode || tab === 'live');
+  if (noMode) setMode('paper');
   if (tab === 'read') readCase();
+  else if (tab === 'voice') voiceCase();
   else if (tab === 'quiz') quizQuestion();
   else if (tab === 'blind') {
     setExplainAvail(false);
@@ -566,20 +587,206 @@ function setTab(tab) {
   else if (tab === 'live') {
     setExplainAvail(false);
     liveSetup();
-  }
-  else {
+  } else {
     fillScenarios();
     setExplainAvail(true);
     runCatalog();
   }
 }
 
+// ---------- Laut befunden ----------
+const voice = { rec: null, busy: false, evaluated: false, status: null, blob: null };
+const GUIDE = {
+  rs: ['Rhythmus: regelmäßig oder unregelmäßig, Sinusrhythmus oder nicht', 'Frequenz pro Minute', 'Breiter oder schmaler Komplex', 'Auffälligstes Zeichen und was daraus folgt'],
+  notsan: ['Rhythmus und Frequenz', 'P-Welle vorhanden, Bezug zum QRS', 'QRS schmal oder breit', 'ST-Strecke: Hebung oder Senkung, in welchen Ableitungen', 'Gesamteindruck und nächster Schritt'],
+  arzt: ['Rhythmus, Frequenz, Regelmäßigkeit', 'Lagetyp', 'P-Welle und PQ-Zeit', 'QRS-Breite und Morphologie', 'ST-Strecke und T-Welle, regional zugeordnet', 'QT-Zeit', 'Zusammenfassende Beurteilung'],
+  experte: ['Rhythmus, Frequenz, Überleitung', 'Lagetyp und Hinweise auf Blöcke', 'P-Welle, PQ, QRS-Morphologie, Zeiten', 'ST-T je Region mit Spiegelbildern', 'Besonderheiten (Delta, Epsilon, U, Brugada und andere)', 'Differenzialdiagnosen', 'Klinische Konsequenz'],
+};
+const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+function voiceGuide() {
+  $('vGuide').innerHTML = GUIDE[level()].map((t) => `<li>${esc(t)}</li>`).join('');
+}
+
+function setPill() {
+  const st = voice.status;
+  const pill = $('vPill');
+  pill.className = 'pill';
+  if (!st) {
+    pill.textContent = 'Server nicht erreichbar';
+    pill.classList.add('off');
+  } else if (!st.transcribe || !st.evaluate) {
+    pill.textContent = `Nicht eingerichtet: ${[!st.transcribe && 'Spracherkennung', !st.evaluate && 'Bewertung'].filter(Boolean).join(', ')}`;
+    pill.classList.add('off');
+  } else {
+    pill.textContent = 'Bereit';
+    pill.classList.add('on');
+  }
+  $('vCodeWrap').classList.toggle('hidden', !(st && st.needsCode));
+}
+
+async function voiceCase() {
+  voiceStop(true);
+  newCase();
+  setExplainAvail(false);
+  showContext();
+  voiceGuide();
+  voice.evaluated = false;
+  $('vText').value = '';
+  $('vText').disabled = false;
+  $('vEval').disabled = false;
+  $('vEval').classList.remove('hidden');
+  $('vNew').classList.add('hidden');
+  $('vResult').classList.add('hidden');
+  $('vErr').classList.add('hidden');
+  $('vHint').textContent = '';
+  $('vTimer').textContent = '0:00';
+  $('vState').textContent = micSupported() ? 'Bereit. Zum Starten auf das Mikrofon tippen.' : 'Dieser Browser kann nicht aufnehmen. Tippe den Befund stattdessen ein.';
+  $('vRec').disabled = !micSupported();
+  voice.status = await apiStatus();
+  setPill();
+}
+
+function voiceError(msg) {
+  $('vErr').textContent = msg;
+  $('vErr').classList.remove('hidden');
+}
+
+function micMessage(e) {
+  if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) return 'Der Zugriff auf das Mikrofon wurde nicht erlaubt. Erlaube ihn in den Browsereinstellungen für diese Seite oder tippe den Befund ein.';
+  if (e && e.name === 'NotFoundError') return 'Es wurde kein Mikrofon gefunden. Tippe den Befund stattdessen ein.';
+  return 'Die Aufnahme konnte nicht gestartet werden. Tippe den Befund stattdessen ein.';
+}
+
+async function voiceToggle() {
+  if (voice.busy || voice.evaluated) return;
+  $('vErr').classList.add('hidden');
+  if (voice.rec) {
+    await voiceStop(false);
+    return;
+  }
+  try {
+    voice.rec = await startRecording({
+      onLevel: (v) => ($('vMeter').style.width = `${Math.round(v * 100)}%`),
+      onTick: (s) => ($('vTimer').textContent = fmtTime(s)),
+      onAutoStop: () => voiceStop(false),
+    });
+  } catch (e) {
+    voice.rec = null;
+    voiceError(micMessage(e));
+    return;
+  }
+  $('vRec').setAttribute('aria-pressed', 'true');
+  $('vRec').setAttribute('aria-label', 'Aufnahme beenden');
+  $('vState').textContent = `Aufnahme läuft (höchstens ${fmtTime(MAX_SECONDS)}). Zum Beenden erneut tippen.`;
+}
+
+// discard = true drops the recording without transcribing (case change, tab change)
+async function voiceStop(discard) {
+  const rec = voice.rec;
+  if (!rec) return;
+  voice.rec = null;
+  $('vRec').setAttribute('aria-pressed', 'false');
+  $('vRec').setAttribute('aria-label', 'Aufnahme starten');
+  $('vMeter').style.width = '0';
+  const blob = await rec.stop();
+  if (discard) return;
+  voice.blob = blob;
+  if (blob.size < 2000) {
+    $('vState').textContent = 'Die Aufnahme war zu kurz.';
+    return;
+  }
+  voice.busy = true;
+  $('vRec').disabled = true;
+  $('vState').innerHTML = '<span class="spin"></span>Wird in Text umgewandelt …';
+  try {
+    const text = await transcribe(blob);
+    const cur = $('vText').value.trim();
+    $('vText').value = cur ? `${cur} ${text}` : text;
+    $('vState').textContent = text ? 'Text erstellt. Prüfen, bei Bedarf korrigieren, dann auswerten.' : 'Es wurde nichts erkannt. Bitte noch einmal aufnehmen oder tippen.';
+  } catch (e) {
+    $('vState').textContent = 'Die Umwandlung ist fehlgeschlagen.';
+    voiceError(e.message + ' Du kannst den Befund auch eintippen.');
+  } finally {
+    voice.busy = false;
+    $('vRec').disabled = !micSupported() || voice.evaluated;
+  }
+}
+
+function renderVoiceResult(b) {
+  const pct = Math.max(0, Math.min(100, Math.round(Number(b.punkte) || 0)));
+  const rows = (b.items || [])
+    .map(
+      (i) => `<div class="res-item"><div class="res-head"><span>${esc(i.aspekt)}</span><span class="verdict v-${esc(i.urteil)}">${esc(i.urteil)}</span></div>
+      <div class="cols"><div><span>Du hast gesagt</span>${esc(i.gesagt)}</div><div><span>Erwartet</span>${esc(i.erwartet)}</div></div>
+      ${i.kommentar ? `<div class="small" style="margin-top:4px">${esc(i.kommentar)}</div>` : ''}</div>`,
+    )
+    .join('');
+  const invented = (b.erfunden || []).length
+    ? `<div class="res-item"><div class="res-head"><span>Nicht zum EKG passend</span></div><ul class="sol">${b.erfunden.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`
+    : '';
+  $('vResult').innerHTML = `<div class="score">${pct} %</div><p style="margin:6px 0 10px">${esc(b.zusammenfassung)}</p>${rows}${invented}
+    <div class="res-item"><div class="res-head"><span>Musterbefund</span></div><blockquote>${esc(b.musterbefund)}</blockquote></div>
+    <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+  $('vResult').classList.remove('hidden');
+  return pct;
+}
+
+async function voiceEvaluate() {
+  if (voice.busy || voice.evaluated) return;
+  if (voice.rec) await voiceStop(false);
+  const text = $('vText').value.trim();
+  $('vErr').classList.add('hidden');
+  if (text.length < 8) {
+    $('vHint').textContent = 'Sprich oder tippe zuerst Deinen Befund.';
+    return;
+  }
+  $('vHint').textContent = '';
+  voice.busy = true;
+  $('vEval').disabled = true;
+  $('vState').innerHTML = '<span class="spin"></span>Claude bewertet den Befund …';
+  try {
+    const ctxText = $('chkCtx').checked ? CONTEXT[state.sc.id] : undefined;
+    const b = await evaluate({ transcript: text, level: level(), fall: truthSummary(state.sig, state.sc, ctxText) });
+    const pct = renderVoiceResult(b);
+    record(state.sc.id, pct, 'voice');
+    voice.evaluated = true;
+    setExplainAvail(true);
+    $('vText').disabled = true;
+    $('vRec').disabled = true;
+    $('vEval').classList.add('hidden');
+    $('vNew').classList.remove('hidden');
+    $('vState').textContent = 'Bewertung fertig.';
+    renderStats();
+    $('vResult').scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  } catch (e) {
+    voiceError(e.message);
+    if (e.kind === 'access_code') $('vCodeWrap').classList.remove('hidden');
+    $('vState').textContent = 'Die Bewertung ist fehlgeschlagen. Der Text bleibt erhalten, Du kannst es erneut versuchen.';
+    $('vEval').disabled = false;
+  } finally {
+    voice.busy = false;
+  }
+}
+
 // ---------- events ----------
+$('nav').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  const g = b.dataset.group;
+  setTab(g === 'befund' ? lastBefund : GROUP_DEFAULT[g]);
+});
 $('tabRead').addEventListener('click', () => setTab('read'));
-$('tabQuiz').addEventListener('click', () => setTab('quiz'));
+$('tabVoice').addEventListener('click', () => setTab('voice'));
 $('tabBlind').addEventListener('click', () => setTab('blind'));
-$('tabFehler').addEventListener('click', () => setTab('fehler'));
-$('tabLive').addEventListener('click', () => setTab('live'));
+$('tabCat').addEventListener('click', () => setTab('cat'));
+$('vRec').addEventListener('click', voiceToggle);
+$('vEval').addEventListener('click', voiceEvaluate);
+$('vNew').addEventListener('click', voiceCase);
+$('vClear').addEventListener('click', () => {
+  if (!voice.evaluated) $('vText').value = '';
+});
+$('vCode').addEventListener('change', (e) => setCode(e.target.value));
 $('btnLiveStart').addEventListener('click', startLive);
 $('btnLiveAns').addEventListener('click', liveAnswer);
 $('chkCtx').addEventListener('change', () => {
@@ -595,7 +802,6 @@ $('errOpts').addEventListener('click', (e) => {
   if (b) errorAnswer(b.dataset.id);
 });
 $('btnErrNext').addEventListener('click', errorCase);
-$('tabCat').addEventListener('click', () => setTab('cat'));
 $('btnBlindReal').addEventListener('click', () => blindAnswer(true));
 $('btnBlindSim').addEventListener('click', () => blindAnswer(false));
 $('btnBlindNext').addEventListener('click', () => {
@@ -684,6 +890,11 @@ $('btnReset').addEventListener('click', () => {
 
 try {
   $('chkCtx').checked = localStorage.getItem('ekg-ctx') === '1';
+} catch (e) {
+  /* ignore */
+}
+try {
+  $('vCode').value = getCode();
 } catch (e) {
   /* ignore */
 }

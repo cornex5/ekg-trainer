@@ -90,3 +90,23 @@ export function grade(sig, sc, ans, level) {
   const pts = items.reduce((s, i) => s + i.pts, 0);
   return { items, pts, max, pct: Math.round((pts / max) * 100), measured: m };
 }
+
+// Facts about the case in plain German, sent to the evaluator of the oral mode.
+export function truthSummary(sig, sc, context) {
+  const truth = TRUTH[sc.id];
+  const m = measure(sig);
+  const arrest = truth.rhythm === 'vf' || truth.rhythm === 'asystole';
+  const a = axisOf(m.axis);
+  return {
+    rhythmus: rhythmLabel(truth.rhythm),
+    rhythmus_auch_akzeptiert: (truth.alt ?? []).map(rhythmLabel),
+    frequenz_pro_min: arrest ? null : m.hr,
+    lagetyp: arrest ? null : `${a[1]}, gemessen ${m.axis} Grad`,
+    qrs_ms: arrest ? null : m.qrsMs,
+    qrs: arrest ? null : m.qrsMs >= 120 ? 'breit' : 'schmal',
+    zusatzbefunde: truth.findings.map((f) => ({ befund: FINDINGS[f][0], merkmale: FINDINGS[f][1] })),
+    keine_zusatzbefunde: truth.findings.length === 0,
+    erklaerung: sc.solution,
+    fallgeschichte: context || undefined,
+  };
+}
