@@ -665,11 +665,17 @@ $('solToggle').addEventListener('click', () => {
   $('solHidden').classList.toggle('hidden', on);
 });
 $('btnExport').addEventListener('click', () => {
-  const blob = new Blob([exportJson()], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = 'ekg-trainer-lernstand.json';
-  a.click();
+  let box = $('exportBox');
+  if (!box) {
+    box = document.createElement('textarea');
+    box.id = 'exportBox';
+    box.readOnly = true;
+    box.rows = 6;
+    box.style.cssText = 'width:100%;margin-top:8px;font:12px var(--mono);background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px';
+    $('btnExport').parentElement.appendChild(box);
+  }
+  box.value = exportJson();
+  box.select();
 });
 $('btnReset').addEventListener('click', () => {
   reset();
