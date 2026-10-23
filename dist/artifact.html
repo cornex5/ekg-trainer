@@ -1,0 +1,110 @@
+
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>EKG-Trainer Prototyp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f3f0ea;
+  --card: #fffdf9;
+  --ink: #171a1d;
+  --muted: #5d636a;
+  --line: #d9d3c7;
+  --accent: #a8201a;
+  --accent-ink: #ffffff;
+  --ok: #1f6b3a;
+  --warn: #9a5b00;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+    --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+  --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; margin-bottom: 14px; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+select, input[type=range], button { font: inherit; }
+select { padding: 6px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); min-width: 190px; }
+button { padding: 7px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.stage { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; overflow-x: auto; }
+.stage svg { display: block; width: 100%; min-width: 760px; height: auto; border-radius: 4px; }
+.stage canvas { display: block; width: 100%; height: auto; border-radius: 4px; background: #05080a; }
+.grid > * { min-width: 0; }
+.grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.card h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
+th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 500; }
+.kv { display: flex; gap: 18px; flex-wrap: wrap; font: 13px var(--mono); margin-bottom: 8px; }
+.kv b { font-weight: 500; color: var(--accent); }
+.note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+ul.sol { margin: 0; padding-left: 18px; }
+.hidden { display: none; }
+</style>
+
+<div class="wrap">
+  <h1>EKG-Trainer, Realismus-Prototyp</h1>
+  <p class="sub">Alle Kurven werden live aus einem Reizleitungs- und Herzvektor-Modell erzeugt, nichts davon ist eine gespeicherte Aufnahme.</p>
+
+  <div class="bar">
+    <label>Fall
+      <select id="scenario"></select>
+    </label>
+    <label>Störungen
+      <select id="noise">
+        <option value="none">keine</option>
+        <option value="low" selected>gering</option>
+        <option value="medium">mittel</option>
+        <option value="high">stark (Wackeln, Brummen)</option>
+      </select>
+    </label>
+    <label>Darstellung
+      <span>
+        <button id="modePaper" aria-pressed="true">Papier 12-Kanal</button>
+        <button id="modeMonitor" aria-pressed="false">Monitor live</button>
+      </span>
+    </label>
+    <button id="reseed" class="primary">Neuer Fall (neue Variation)</button>
+    <button id="solToggle" aria-pressed="false">Lösung zeigen</button>
+  </div>
+
+  <div class="stage">
+    <div id="paper"></div>
+    <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Realismus-Check (gemessen im Signal, 10 mm/mV)</h2>
+      <div class="kv" id="kv"></div>
+      <table id="tbl"></table>
+      <p class="note" id="rangeNote"></p>
+    </div>
+    <div class="card">
+      <h2>Lösung</h2>
+      <div id="solHidden" class="note">Verborgen. Erst befunden, dann aufdecken.</div>
+      <ul class="sol hidden" id="sol"></ul>
+    </div>
+  </div>
+</div>
+<script>(()=>{function j(t){let e=t>>>0;return function(){e=e+1831565813>>>0;let n=e;return n=Math.imul(n^n>>>15,n|1),n^=n+Math.imul(n^n>>>7,n|61),((n^n>>>14)>>>0)/4294967296}}function V(t){let e=0;for(;e===0;)e=t();let r=t();return Math.sqrt(-2*Math.log(e))*Math.cos(2*Math.PI*r)}function lt(t,e){let r={atrial:[],ventricular:[]},n=60/t.hr,o=t.pr??.16,i=t.rsa??.04,s=-1.2;for(;s<t.duration+1.5;){let d=n*(1+i*Math.sin(2*Math.PI*.25*s+.7)+.012*V(e));r.atrial.push({t:s}),r.ventricular.push({t:s+o,rr:d}),s+=d}return r}function ht(t,e){let r={atrial:[],ventricular:[],fibrillation:!0},n=60/t.hr,o=t.cv??.22,i=-1;for(;i<t.duration+1.5;){let s;do s=n*Math.exp(o*V(e)-o*o/2);while(s<.26);r.ventricular.push({t:i,rr:s}),i+=s}return r}function ut(t,e){let r={atrial:[],ventricular:[]},n=60/t.atrialRate,o=-1*e();for(;o<t.duration+1.5;)r.atrial.push({t:o}),o+=n*(1+.012*V(e));let i=60/t.escapeRate;for(o=-i*e();o<t.duration+1.5;){let s=i*(1+.02*V(e));r.ventricular.push({t:o,rr:s}),o+=s}return r}var Q={sinus:lt,af:ht,avblock3:ut};function G(t){return{x:new Float32Array(t),y:new Float32Array(t),z:new Float32Array(t)}}function v(t,e,r,n,o,i){let s=t.x.length,d=Math.max(0,Math.floor((r-6*n)*e)),f=Math.min(s-1,Math.ceil((r+6*o)*e));for(let l=d;l<=f;l++){let c=l/e-r,a=c<0?n:o,u=Math.exp(-.5*c*c/(a*a));t.x[l]+=i[0]*u,t.y[l]+=i[1]*u,t.z[l]+=i[2]*u}}var H=t=>1/(1+Math.exp(-t));function dt(t,e,r,n,o,i,s){let d=t.x.length,f=Math.max(0,Math.floor((r-8*o)*e)),l=Math.min(d-1,Math.ceil((n+8*i)*e));for(let c=f;c<=l;c++){let a=c/e,u=H((a-r)/o)*(1-H((a-n)/i));t.x[c]+=s[0]*u,t.y[c]+=s[1]*u,t.z[c]+=s[2]*u}}var K={qrs:.09,qtc:.41,p1:[.06,.11,.04],p2:[.03,.02,-.045],q:[-.12,.08,.25],r:[1.15,1,-.42],s:[-.15,-.35,-.22],t:[.3,.26,-.04],st:[0,0,0],extraQ:null};function W(t,e,r,n){v(t,e,r+.04,.022,.022,n.p1),v(t,e,r+.068,.018,.018,n.p2)}function J(t,e,r,n,o,i=1){let s=o.qrs,d=o.qt??o.qtc*Math.cbrt(n),f=a=>[a[0]*i,a[1]*i,a[2]*i];v(t,e,r+.14*s,.085*s,.085*s,f(o.q)),o.broad?(v(t,e,r+.28*s,.17*s,.17*s,f(o.r.map(a=>a*.6))),v(t,e,r+.66*s,.17*s,.17*s,f(o.r.map(a=>a*.56)))):v(t,e,r+.4*s,.15*s,.15*s,f(o.r)),v(t,e,r+.68*s,.115*s,.115*s,f(o.s)),o.extraQ&&v(t,e,r+.12*s,.1*s,.1*s,o.extraQ);let l=r+1.02*s,c=r+.7*d;dt(t,e,l,c-.02,.008,.05,o.st),v(t,e,c,.135*d,.095*d,o.t)}function U(t,e,r,n,o){let i=[],s=[.25,.4,.9];for(let l=0;l<5;l++){let c=[0,0,0].map((a,u)=>s[u]*(.6+.8*n())*(u===2||n()>.25?1:-1));i.push({f:4.2+3.6*n(),ph:6.28*n(),mod:.15+.35*n(),modPh:6.28*n(),am:.6+.8*n(),amF:.1+.25*n(),amPh:6.28*n(),dir:c})}let d=t.x.length,f=o/Math.sqrt(i.length);for(let l=0;l<d;l++){let c=l/e;for(let a of i){let u=.55+.45*Math.sin(6.28*a.amF*c+a.amPh),M=f*a.am*u*Math.sin(6.28*a.f*c+a.ph+.8*Math.sin(6.28*a.mod*c+a.modPh));t.x[l]+=M*a.dir[0],t.y[l]+=M*a.dir[1],t.z[l]+=M*a.dir[2]}}}var ft={inferior:[-.1,.9,0],anterior:[.45,-.35,.8],lateral:[.75,-.45,-.05],posterior:[-.05,.1,-.75]},I=(t,e)=>t.map(r=>r*e),q=(t,e)=>t.map((r,n)=>r+e[n]),mt=(t,e)=>t[0]*e[0]+t[1]*e[1]+t[2]*e[2],pt=t=>I(t,1/Math.hypot(...t));function xt(t,{territory:e,stage:r="acute",severity:n=.3}){let o=ft[e],i=pt(o);r==="hyperacute"?(t.st=I(o,n*.35),t.t=q(t.t,I(o,n*1.5))):r==="acute"?(t.st=I(o,n),t.t=q(t.t,I(o,n*.5))):r==="subacute"?(t.st=I(o,n*.35),t.t=q(t.t,I(o,-n*2.2)),Y(t,i,.4)):r==="old"&&(t.t=q(t.t,I(o,-n*.8)),Y(t,i,.5))}function Y(t,e,r){t.extraQ=I(e,-.55*r);let n=mt(t.r,e);n>0&&(t.r=q(t.r,I(e,-n*.45*r)))}var Mt={junctional:{qrs:.09},ventricular:{qrs:.15,broad:!0,q:[0,0,.08],r:[1.3,.35,-.95],s:[0,0,0],t:[-.5,-.15,.32]}};function X(t){let e=structuredClone(K);return t.rhythm==="avblock3"&&t.escape&&Object.assign(e,structuredClone(Mt[t.escape])),t.stemi&&xt(e,t.stemi),t.qtc&&(e.qtc=t.qtc),e}var E=["I","II","III","aVR","aVL","aVF","V1","V2","V3","V4","V5","V6"],gt=[[1,0,0],[.5,.8660254,0],[-.5,.8660254,0],[-.8660254,-.5,0],[.8660254,-.5,0],[0,1,0]],wt=[[-40,-.15,.85],[-10,-.12,1.4],[25,-.05,1.5],[50,0,1.5],[70,.08,1.3],[88,.12,1.1]],St=gt.concat(wt.map(([t,e,r])=>{let n=t*Math.PI/180;return[r*Math.sin(n),e,r*Math.cos(n)]}));function Z(t,e){let r=[];for(let n of St){let o=new Float32Array(e);for(let i=0;i<e;i++)o[i]=n[0]*t.x[i]+n[1]*t.y[i]+n[2]*t.z[i];r.push(o)}return r}var D={none:{wander:0,mains:0,emg:0,step:0},low:{wander:.05,mains:.004,emg:.006,step:0},medium:{wander:.12,mains:.012,emg:.02,step:0},high:{wander:.25,mains:.03,emg:.05,step:.15}};function tt(t,e,r,n){let o=D[r]??D.none;if(r==="none"||!D[r])return t.map(u=>Float32Array.from(u));let i=t[0].length,s=.2+.1*n(),d=6.28*n(),f=.05+.05*n(),l=6.28*n(),c=6.28*n(),a=o.step>0?Math.floor(i*(.3+.4*n())):-1;return t.map((u,M)=>{let x=new Float32Array(i),g=.7+.6*n(),w=.5+n(),S=0;for(let m=0;m<i;m++){let k=m/e,h=o.wander*g*(.7*Math.sin(6.28*s*k+d)+.5*Math.sin(6.28*f*k+l)),$=o.mains*w*Math.sin(6.28*50*k+c+M*.3),A=V(n);S=.55*S+.45*A;let b=o.emg*S*1.6,R=a>=0&&m>a?o.step*g:0;x[m]=u[m]+h+$+b+R}return x})}var P=500;function et(t){let e=t.duration??10,r={...t,duration:e},n=j(t.seed??1),o=Q[t.rhythm](r,n),i=X(t),s=Math.round(e*P),d=G(s);for(let c of o.atrial)W(d,P,c.t,i);for(let c of o.ventricular){let a=1+.04*Math.sin(2*Math.PI*.25*c.t+1.3);J(d,P,c.t,c.rr,i,a)}o.fibrillation&&U(d,P,e,n,t.fAmp??.1);let f=Z(d,s),l=tt(f,P,t.noise??"low",n);return{fs:P,n:s,duration:e,names:E,leads:l,clean:f,sched:o,morph:i,scenario:t}}var $t="#fdf4f1",yt="#f3c4c0",At="#e58f8c";function nt(t,e,r,n,o,i,s,d,f,l=1){let c=t[e],a="";for(let u=r;u<n;u+=l){let M=o+(u-r)/f*s,x=i-c[u]*d;a+=(u===r?"M":"L")+M.toFixed(2)+" "+x.toFixed(2)}return a}function ot(t,e={}){let r=e.speed??25,n=e.gain??10,o=t.fs,i=16,s=16,d=32,f=t.duration,l=i+f*r+6,c=s+d*4+6,a=[[0,3,6,9],[1,4,7,10],[2,5,8,11]],u=f/4,M=h=>s+d*(h+.58),x=[];x.push(`<rect width="${l}" height="${c}" fill="${$t}"/>`);let g="";for(let h=0;h<=l;h+=1)g+=`M${h} 0V${c}`;for(let h=0;h<=c;h+=1)g+=`M0 ${h}H${l}`;x.push(`<path d="${g}" stroke="${yt}" stroke-width="0.12" fill="none"/>`);let w="";for(let h=0;h<=l;h+=5)w+=`M${h} 0V${c}`;for(let h=0;h<=c;h+=5)w+=`M0 ${h}H${l}`;x.push(`<path d="${w}" stroke="${At}" stroke-width="0.28" fill="none"/>`);let S=[],m=[];for(let h=0;h<3;h++)for(let $=0;$<4;$++){let A=a[h][$],b=Math.round($*u*o),R=Math.round(($+1)*u*o),T=i+$*u*r;S.push(nt(t.leads,A,b,R,T,M(h),r,n,o)),m.push(`<text x="${(T+1.2).toFixed(1)}" y="${(M(h)-11.5).toFixed(1)}" font-size="3.6" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="#1b1b1b">${E[A]}</text>`),$>0&&S.push(`M${T.toFixed(2)} ${(M(h)-2).toFixed(2)}V${(M(h)+2).toFixed(2)}`)}S.push(nt(t.leads,1,0,t.n,i,M(3),r,n,o)),m.push(`<text x="${i+1.2}" y="${(M(3)-11.5).toFixed(1)}" font-size="3.6" font-family="Arial, Helvetica, sans-serif" font-weight="700" fill="#1b1b1b">II</text>`);for(let h=0;h<4;h++){let $=M(h),A=3,b=.2*r;S.push(`M${A} ${$}H${A+1}V${$-n}H${A+1+b}V${$}H${A+2+b}`)}x.push(`<path d="${S.join("")}" stroke="#141414" stroke-width="0.34" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`),x.push(...m);let k=e.header??`${r} mm/s   ${n} mm/mV   0,5 bis 150 Hz`;return x.push(`<text x="${i}" y="9" font-size="3.4" font-family="Arial, Helvetica, sans-serif" fill="#3a3a3a">${k}</text>`),`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${l} ${c}" width="${l*4}" height="${c*4}">${x.join("")}</svg>`}var z=[{id:"sinus",title:"Normaler Sinusrhythmus",rhythm:"sinus",hr:72,seed:11,noise:"low",solution:["Sinusrhythmus, Frequenz um 72/min","Normaler Lagetyp","PQ, QRS und QT im Normbereich","Keine ST-Hebungen oder -Senkungen"]},{id:"af",title:"Vorhofflimmern",rhythm:"af",hr:118,seed:23,noise:"low",fAmp:.12,solution:["Absolute Arrhythmie, keine erkennbaren P-Wellen","Flimmerwellen, am deutlichsten in V1","Schmale QRS-Komplexe, Frequenz um 118/min (Tachyarrhythmie)"]},{id:"avb3",title:"AV-Block III mit breitem Ersatzrhythmus",rhythm:"avblock3",atrialRate:88,escapeRate:34,escape:"ventricular",seed:37,noise:"low",solution:["P-Wellen regelmaessig um 88/min, QRS-Komplexe um 34/min, keine feste Beziehung (AV-Dissoziation)","Breiter Kammerersatzrhythmus (QRS um 150 ms)","AV-Block III, ausgepraegte Bradykardie"]},{id:"stemi-inf",title:"Akuter Inferiorer STEMI",rhythm:"sinus",hr:84,seed:41,noise:"low",stemi:{territory:"inferior",stage:"acute",severity:.34},solution:["Sinusrhythmus um 84/min","ST-Hebungen in II, III, aVF (III groesser als II)","Spiegelbildliche ST-Senkungen in I und aVL","Inferiorer STEMI, Versorgungsgebiet der rechten Koronararterie"]},{id:"stemi-ant",title:"Akuter Vorderwand-STEMI",rhythm:"sinus",hr:92,seed:53,noise:"low",stemi:{territory:"anterior",stage:"acute",severity:.3},solution:["Sinusrhythmus um 92/min","ST-Hebungen in V1 bis V5, I und aVL","Spiegelbildliche ST-Senkungen inferior (III, aVF)","Vorderwandinfarkt, Versorgungsgebiet des Ramus interventricularis anterior"]}];function _(t){let e=t.fs,r=t.sched.ventricular.filter(a=>a.t>1&&a.t+.6<t.duration),n=t.morph.qrs,o=[],i=t.sched.ventricular;for(let a=1;a<i.length;a++)i[a].t>0&&i[a].t<t.duration&&o.push(i[a].t-i[a-1].t);let s=o.length?60/(o.reduce((a,u)=>a+u,0)/o.length):null,d=E.map((a,u)=>{let M=r.map(g=>{let w=t.clean[u],S=Math.round((g.t-.012)*e),m=w[S],k=Math.round(g.t*e),h=Math.round((g.t+n)*e),$=-1e9,A=1e9,b=0;for(let L=k;L<=h;L++){let F=w[L]-m;F>$&&($=F),F<A&&(A=F),b+=F/e}let R=Math.round((g.t+1.02*n+.06)*e),T=w[R]-m,at=Math.round((g.t+n+.05)*e),ct=Math.round((g.t+.7*(g.rr?t.morph.qtc*Math.cbrt(g.rr):.4)+.12)*e),O=0;for(let L=at;L<=Math.min(ct,w.length-1);L++){let F=w[L]-m;Math.abs(F)>Math.abs(O)&&(O=F)}return{r:Math.max(0,$),s:Math.min(0,A),area:b,st:T,t:O}}),x=g=>{let w=M.map(S=>S[g]).sort((S,m)=>S-m);return w.length?w[Math.floor(w.length/2)]:0};return{name:a,r:x("r"),s:x("s"),area:x("area"),st:x("st"),t:x("t")}}),f=d[0].area,l=d[5].area,c=Math.round(Math.atan2(l,f)*180/Math.PI);return{hr:s?Math.round(s):null,axis:c,perLead:d,qrsMs:Math.round(n*1e3)}}var rt={axis:[-30,90],rV1:[0,.7],sV1:[-2,0],rV5:[.4,2.6],rI:[.2,1.5]};var p=t=>document.getElementById(t),y={sc:z[0],seedOffset:0,noise:"low",mode:"paper",sig:null};for(let t of z){let e=document.createElement("option");e.value=t.id,e.textContent=t.title,p("scenario").appendChild(e)}function B(t){return(t*10).toFixed(1)}function It(t,e,r){return`<span style="color:var(${t>=e&&t<=r?"--ok":"--warn"})">${t}</span>`}function N(){let t={...y.sc,noise:y.noise,seed:(y.sc.seed??1)+y.seedOffset*101};y.sig=et(t);let e=_(y.sig);p("paper").innerHTML=ot(y.sig);let r=y.sc.id==="sinus";p("kv").innerHTML=`<span>Frequenz <b>${e.hr??"-"}</b>/min</span><span>QRS-Breite <b>${e.qrsMs}</b> ms</span><span>Lagetyp (QRS-Achse) <b>${r?It(e.axis,...rt.axis):e.axis}</b>&deg;</span>`;let n="<tr><th>Ableitung</th><th>R (mm)</th><th>S (mm)</th><th>ST +60 ms (mm)</th><th>T (mm)</th></tr>";for(let o of e.perLead)n+=`<tr><td>${o.name}</td><td>${B(o.r)}</td><td>${B(o.s)}</td><td>${B(o.st)}</td><td>${B(o.t)}</td></tr>`;p("tbl").innerHTML=n,p("rangeNote").textContent=r?"Farbig: Lagetyp gegen den Erwachsenen-Normbereich von -30 bis 90 Grad. Das ist eine Plausibilit\xE4tspr\xFCfung, kein Beweis, dass ein Bild echt aussieht. Der Beweis kommt vom Blindtest gegen echte Aufnahmen.":"Werte stammen aus dem simulierten Signal ohne St\xF6rungen. F\xFCr pathologische F\xE4lle gibt es keine allgemeinen Normbereiche, hier z\xE4hlt der Vergleich mit dem erwarteten Befundmuster.",p("sol").innerHTML=y.sc.solution.map(o=>`<li>${o}</li>`).join(""),st()}var C=0;function st(){if(cancelAnimationFrame(C),y.mode!=="monitor"||!y.sig)return;let t=p("monitor"),e=t.getContext("2d"),r=y.sig,n=r.leads[1],o=t.width,i=t.height,s=6,d=40,f=130,l=200,c=_(r);function a(u){let M=u/1e3,x=Math.floor(M/s),g=M%s/s,w=Math.floor(g*o);e.fillStyle="#05080a",e.fillRect(0,0,o,i),e.lineWidth=2.2,e.strokeStyle="#4dff88",e.lineJoin="round",e.beginPath();let S=!1;for(let m=0;m<o;m++){if(m>w&&m<w+d){S=!1;continue}let h=(((m<=w?x:x-1)*s+m/o*s)%r.duration+r.duration)%r.duration,$=Math.min(r.n-1,Math.floor(h*r.fs)),A=l-n[$]*f;S?e.lineTo(m,A):(e.moveTo(m,A),S=!0)}e.stroke(),e.fillStyle="#4dff88",e.font="600 20px IBM Plex Sans, Arial, sans-serif",e.fillText("II",24,36),e.font="700 56px IBM Plex Sans, Arial, sans-serif",e.fillText(String(c.hr??"--"),o-170,74),e.font="16px IBM Plex Sans, Arial, sans-serif",e.fillText("HF /min",o-168,98),C=requestAnimationFrame(a)}C=requestAnimationFrame(a)}function it(t){y.mode=t,p("paper").classList.toggle("hidden",t!=="paper"),p("monitor").classList.toggle("hidden",t!=="monitor"),p("modePaper").setAttribute("aria-pressed",String(t==="paper")),p("modeMonitor").setAttribute("aria-pressed",String(t==="monitor")),st()}p("scenario").addEventListener("change",t=>{y.sc=z.find(e=>e.id===t.target.value),y.seedOffset=0,N()});p("noise").addEventListener("change",t=>{y.noise=t.target.value,N()});p("reseed").addEventListener("click",()=>{y.seedOffset+=1,N()});p("modePaper").addEventListener("click",()=>it("paper"));p("modeMonitor").addEventListener("click",()=>it("monitor"));p("solToggle").addEventListener("click",()=>{let t=p("solToggle").getAttribute("aria-pressed")!=="true";p("solToggle").setAttribute("aria-pressed",String(t)),p("solToggle").textContent=t?"L\xF6sung verbergen":"L\xF6sung zeigen",p("sol").classList.toggle("hidden",!t),p("solHidden").classList.toggle("hidden",t)});N();})();
+</script>

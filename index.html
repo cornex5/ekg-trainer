@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>EKG-Trainer Prototyp</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f3f0ea;
+  --card: #fffdf9;
+  --ink: #171a1d;
+  --muted: #5d636a;
+  --line: #d9d3c7;
+  --accent: #a8201a;
+  --accent-ink: #ffffff;
+  --ok: #1f6b3a;
+  --warn: #9a5b00;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+  --sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+    --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #14161a; --card: #1c1f24; --ink: #ecebe7; --muted: #9aa0a8; --line: #2e333a;
+  --accent: #e0574f; --accent-ink: #14161a; --ok: #62c283; --warn: #e0a24a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 15px/1.5 var(--sans); }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 20px 48px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1 { font-size: 20px; margin: 0 0 4px; font-weight: 600; }
+.sub { color: var(--muted); margin: 0 0 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; margin-bottom: 14px; }
+label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+select, input[type=range], button { font: inherit; }
+select { padding: 6px 8px; background: var(--paper); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); min-width: 190px; }
+button { padding: 7px 12px; border-radius: var(--r); border: 1px solid var(--line); background: var(--paper); color: var(--ink); cursor: pointer; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.stage { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 10px; overflow-x: auto; }
+.stage svg { display: block; width: 100%; min-width: 760px; height: auto; border-radius: 4px; }
+.stage canvas { display: block; width: 100%; height: auto; border-radius: 4px; background: #05080a; }
+.grid > * { min-width: 0; }
+.grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; }
+.card h2 { font-size: 14px; margin: 0 0 8px; font-weight: 600; }
+table { width: 100%; border-collapse: collapse; font: 13px var(--mono); }
+th, td { text-align: right; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 500; }
+.kv { display: flex; gap: 18px; flex-wrap: wrap; font: 13px var(--mono); margin-bottom: 8px; }
+.kv b { font-weight: 500; color: var(--accent); }
+.note { color: var(--muted); font-size: 13px; margin: 8px 0 0; }
+ul.sol { margin: 0; padding-left: 18px; }
+.hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>EKG-Trainer, Realismus-Prototyp</h1>
+  <p class="sub">Alle Kurven werden live aus einem Reizleitungs- und Herzvektor-Modell erzeugt, nichts davon ist eine gespeicherte Aufnahme.</p>
+
+  <div class="bar">
+    <label>Fall
+      <select id="scenario"></select>
+    </label>
+    <label>Störungen
+      <select id="noise">
+        <option value="none">keine</option>
+        <option value="low" selected>gering</option>
+        <option value="medium">mittel</option>
+        <option value="high">stark (Wackeln, Brummen)</option>
+      </select>
+    </label>
+    <label>Darstellung
+      <span>
+        <button id="modePaper" aria-pressed="true">Papier 12-Kanal</button>
+        <button id="modeMonitor" aria-pressed="false">Monitor live</button>
+      </span>
+    </label>
+    <button id="reseed" class="primary">Neuer Fall (neue Variation)</button>
+    <button id="solToggle" aria-pressed="false">Lösung zeigen</button>
+  </div>
+
+  <div class="stage">
+    <div id="paper"></div>
+    <canvas id="monitor" width="1000" height="320" class="hidden"></canvas>
+  </div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Realismus-Check (gemessen im Signal, 10 mm/mV)</h2>
+      <div class="kv" id="kv"></div>
+      <table id="tbl"></table>
+      <p class="note" id="rangeNote"></p>
+    </div>
+    <div class="card">
+      <h2>Lösung</h2>
+      <div id="solHidden" class="note">Verborgen. Erst befunden, dann aufdecken.</div>
+      <ul class="sol hidden" id="sol"></ul>
+    </div>
+  </div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
