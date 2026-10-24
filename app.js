@@ -986,4 +986,4 @@ try {
   /* ignore */
 }
 renderStats();
-setTab('read');
+setTab(location.hash === '#blind' ? 'blind' : 'read');

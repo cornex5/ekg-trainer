@@ -16,6 +16,10 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@fontsource/dm-mono": "^5.3.0",
+    "@fontsource/hanken-grotesk": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
     "@resvg/resvg-js": "^2.6.2",
     "esbuild": "^0.28.2"
   }

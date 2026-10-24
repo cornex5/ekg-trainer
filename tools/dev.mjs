@@ -57,7 +57,13 @@ const server = http.createServer(async (req, res) => {
     }
     return;
   }
+  if (url.pathname.startsWith('/fonts/')) {
+    res.setHeader('Content-Type', 'font/woff2');
+    res.end(readFileSync(path.join(root, 'dist', 'fonts', path.basename(url.pathname))));
+    return;
+  }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.end(readFileSync(path.join(root, 'dist', 'index.html')));
+  const page = url.pathname.startsWith('/app') ? path.join('app', 'index.html') : 'index.html';
+  res.end(readFileSync(path.join(root, 'dist', page)));
 });
 server.listen(port, () => console.log(`http://localhost:${port}`));
