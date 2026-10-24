@@ -9,9 +9,29 @@ export function send(res, status, obj) {
 }
 
 // Optional access code (environment variable ACCESS_CODE). Keeps strangers from spending the API budget.
+function basicPassword(req) {
+  const auth = String(req.headers.authorization || '');
+  if (!auth.startsWith('Basic ')) return '';
+  const raw = Buffer.from(auth.slice(6), 'base64').toString('utf8');
+  return raw.slice(raw.indexOf(':') + 1);
+}
+
+function sameSecret(given, code) {
+  const a = crypto.createHash('sha256').update(given).digest();
+  const b = crypto.createHash('sha256').update(code).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
+// True when the browser already passed the site-wide gate (middleware.js) with the same code.
+export function passedGate(req) {
+  const code = process.env.ACCESS_CODE;
+  return !!code && sameSecret(basicPassword(req), code);
+}
+
 export function allowed(req, res) {
   const code = process.env.ACCESS_CODE;
   if (!code) return true;
+  if (passedGate(req)) return true;
   const given = String(req.headers['x-access-code'] || '');
   const a = crypto.createHash('sha256').update(given).digest();
   const b = crypto.createHash('sha256').update(code).digest();
