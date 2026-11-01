@@ -8,7 +8,6 @@ import { CONTEXT } from './src/context.js';
 import { LIVE, SEG_SECONDS } from './src/livescen.js';
 import { grade, truthSummary, caseFacts } from './src/grade.js';
 import { ERRORS, applyError, NOISE_FOR } from './src/errors.js';
-import { makeBlindSet } from './src/blind.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
 import { apiStatus, evaluate, getCode, setCode } from './src/api.js';
 import { stepsFor, derive, answersToForm, labelOf, review } from './src/wizard.js';
@@ -103,7 +102,7 @@ function updateStageInfo() {
 function redrawPaper() {
   updateStageInfo();
   if (!state.sig) return;
-  const marks = tools.explain && state.tab !== 'blind' ? marksFor(state.sig) : [];
+  const marks = tools.explain ? marksFor(state.sig) : [];
   state.svgStr = paperSvg(state.sig, { speed: Number($('speed').value), gain: Number($('gain').value), marks });
   $('paper').innerHTML = state.svgStr;
   const svg = $('paper').querySelector('svg');
@@ -521,51 +520,6 @@ function quizAnswer(id) {
   renderStats();
 }
 
-// ---------- Blindtest ----------
-const blind = { items: [], i: 0, hits: 0, answered: false, log: [] };
-function blindStart() {
-  blind.items = makeBlindSet(20);
-  blind.i = 0;
-  blind.hits = 0;
-  blind.log = [];
-  blindShow();
-}
-function blindShow() {
-  const it = blind.items[blind.i];
-  state.sig = it.make();
-  blind.answered = false;
-  tools.pts = [];
-  redrawPaper();
-  $('blindFb').classList.add('hidden');
-  $('btnBlindNext').classList.add('hidden');
-  $('btnBlindReal').disabled = false;
-  $('btnBlindSim').disabled = false;
-  $('blindHint').textContent = `EKG ${blind.i + 1} von ${blind.items.length}`;
-}
-function blindAnswer(guessReal) {
-  if (blind.answered) return;
-  blind.answered = true;
-  const it = blind.items[blind.i];
-  const ok = guessReal === it.real;
-  if (ok) blind.hits += 1;
-  blind.log.push({ real: it.real, guess: guessReal });
-  $('btnBlindReal').disabled = true;
-  $('btnBlindSim').disabled = true;
-  const last = blind.i + 1 >= blind.items.length;
-  let txt = `<strong class="${ok ? 'ok' : 'bad'}">${ok ? 'Richtig.' : 'Daneben.'}</strong> Das war ${it.real ? 'eine echte Aufnahme' : 'eine Simulation'}.`;
-  if (last) {
-    const pct = Math.round((blind.hits / blind.items.length) * 100);
-    const realHit = blind.log.filter((l) => l.real && l.guess).length;
-    const simHit = blind.log.filter((l) => !l.real && !l.guess).length;
-    const nReal = blind.log.filter((l) => l.real).length;
-    const nSim = blind.log.length - nReal;
-    txt += `<div class="score">${pct} %</div><div class="small">Echte erkannt: ${realHit} von ${nReal}. Simulierte erkannt: ${simHit} von ${nSim}. Bei 20 Bildern liegt reines Raten mit 95 Prozent Wahrscheinlichkeit zwischen 30 und 70 Prozent.</div>`;
-  }
-  $('blindFb').innerHTML = txt;
-  $('blindFb').classList.remove('hidden');
-  if (!last) $('btnBlindNext').classList.remove('hidden');
-}
-
 // ---------- Fehlerquellen ----------
 const err = { cur: null, answered: false };
 function errorCase() {
@@ -687,7 +641,7 @@ function runCatalog() {
   for (const l of m.perLead) rows += `<tr><td>${l.name}</td><td>${mm(l.r)}</td><td>${mm(l.s)}</td><td>${mm(l.st)}</td><td>${mm(l.t)}</td></tr>`;
   $('tbl').innerHTML = rows;
   $('rangeNote').textContent = normal
-    ? 'Farbig: Lagetyp gegen den Erwachsenen-Normbereich von -30 bis 90 Grad. Das ist eine Plausibilitätsprüfung, kein Beweis, dass ein Bild echt aussieht. Der Beweis kommt vom Blindtest gegen echte Aufnahmen.'
+    ? 'Farbig: Lagetyp gegen den Erwachsenen-Normbereich von -30 bis 90 Grad. Das ist eine Plausibilitätsprüfung, kein Beweis, dass ein Bild echt aussieht.'
     : 'Werte stammen aus dem simulierten Signal ohne Störungen. Für pathologische Fälle gibt es keine allgemeinen Normbereiche, hier zählt der Vergleich mit dem erwarteten Befundmuster.';
   $('sol').innerHTML = state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('');
 }
@@ -761,7 +715,7 @@ function startMonitor() {
 }
 
 function setMode(mode) {
-  if (state.tab === 'blind' || state.tab === 'fehler') mode = 'paper';
+  if (state.tab === 'fehler') mode = 'paper';
   state.mode = mode;
   $('paper').classList.toggle('hidden', mode !== 'paper');
   $('monitor').classList.toggle('hidden', mode !== 'monitor');
@@ -777,9 +731,9 @@ function renderStats() {
   $('statline').innerHTML = `<span class="chip"><b>${s.done}</b> bearbeitet</span><span class="chip">Schnitt <b>${s.done ? s.avg + ' %' : '-'}</b></span><span class="chip"><b>${s.due}</b> fällig</span>`;
 }
 
-const GROUP = { read: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', blind: 'labor', cat: 'labor' };
-const GROUP_DEFAULT = { befund: 'read', quiz: 'quiz', live: 'live', fehler: 'fehler', labor: 'blind' };
-const PANELS = { read: 'panelRead', quiz: 'panelQuiz', blind: 'panelBlind', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
+const GROUP = { read: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', cat: 'labor' };
+const GROUP_DEFAULT = { befund: 'read', quiz: 'quiz', live: 'live', fehler: 'fehler', labor: 'cat' };
+const PANELS = { read: 'panelRead', quiz: 'panelQuiz', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
 
 function setTab(tab) {
   const prev = state.tab;
@@ -794,7 +748,7 @@ function setTab(tab) {
     else b.removeAttribute('aria-current');
   }
   $('subLabor').classList.toggle('hidden', group !== 'labor');
-  for (const [id, t] of [['tabBlind', 'blind'], ['tabCat', 'cat']]) $(id).setAttribute('aria-pressed', String(t === tab));
+  $('tabCat').setAttribute('aria-pressed', String(tab === 'cat'));
   for (const [t, id] of Object.entries(PANELS)) $(id).classList.toggle('hidden', t !== tab);
   if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
   const trainer = tab === 'read' || tab === 'quiz';
@@ -802,15 +756,12 @@ function setTab(tab) {
   $('wLevel').classList.toggle('hidden', !trainer);
   $('wCat').classList.toggle('hidden', !trainer);
   $('wCtx').classList.toggle('hidden', !trainer);
-  const noMode = tab === 'blind' || tab === 'fehler';
+  const noMode = tab === 'fehler';
   $('modeWrap').classList.toggle('hidden', noMode || tab === 'live');
   if (noMode) setMode('paper');
   if (tab === 'read') readCase();
   else if (tab === 'quiz') quizQuestion();
-  else if (tab === 'blind') {
-    setExplainAvail(false);
-    blindStart();
-  } else if (tab === 'fehler') errorCase();
+  else if (tab === 'fehler') errorCase();
   else if (tab === 'live') {
     setExplainAvail(false);
     liveSetup();
@@ -828,7 +779,6 @@ $('nav').addEventListener('click', (e) => {
   const g = b.dataset.group;
   setTab(GROUP_DEFAULT[g]);
 });
-$('tabBlind').addEventListener('click', () => setTab('blind'));
 $('tabCat').addEventListener('click', () => setTab('cat'));
 $('vCode').addEventListener('change', (e) => setCode(e.target.value));
 $('btnLiveStart').addEventListener('click', startLive);
@@ -846,13 +796,6 @@ $('errOpts').addEventListener('click', (e) => {
   if (b) errorAnswer(b.dataset.id);
 });
 $('btnErrNext').addEventListener('click', errorCase);
-$('btnBlindReal').addEventListener('click', () => blindAnswer(true));
-$('btnBlindSim').addEventListener('click', () => blindAnswer(false));
-$('btnBlindNext').addEventListener('click', () => {
-  blind.i += 1;
-  blindShow();
-});
-$('btnBlindStart').addEventListener('click', blindStart);
 function placePoint(e) {
   if (tools.pts.length >= 2) tools.pts = [];
   tools.pts.push(svgPoint(e));
@@ -929,7 +872,7 @@ $('level').addEventListener('change', () => {
 });
 $('cat').addEventListener('change', () => setTab(state.tab));
 function refresh() {
-  if (state.tab === 'blind' || state.tab === 'fehler') redrawPaper();
+  if (state.tab === 'fehler') redrawPaper();
   else if (state.tab === 'cat') runCatalog();
   else build();
 }
@@ -986,4 +929,4 @@ try {
   /* ignore */
 }
 renderStats();
-setTab(location.hash === '#blind' ? 'blind' : 'read');
+setTab('read');
