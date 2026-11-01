@@ -12,11 +12,3 @@ cpSync('fonts', 'dist/fonts', { recursive: true });
 const landing = readFileSync('landing.html', 'utf8').replace('@@STEMI@@', readFileSync('tools/stemi-strip.txt', 'utf8').trim());
 writeFileSync('dist/index.html', landing);
 console.log('dist/index.html', landing.length, 'bytes');
-if (!process.argv.includes('--artifact')) process.exit(0);
-
-// The artifact host supplies doctype, head and body itself, so only content is kept.
-const head = html.match(/<head>([\s\S]*?)<\/head>/)[1].replace(/<meta charset[^>]*>\n?/, '').replace(/<meta name="viewport"[^>]*>\n?/, '');
-const body = html.match(/<body>([\s\S]*)<\/body>/)[1];
-mkdirSync('artifact', { recursive: true });
-writeFileSync('artifact/artifact.html', head + body);
-console.log('artifact/artifact.html written');

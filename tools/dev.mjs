@@ -1,5 +1,5 @@
 // Local server: serves dist/index.html and runs the api/ functions with a small req/res adapter.
-// MOCK_EXTERNAL=1 replaces the calls to OpenAI and Anthropic with canned answers, for tests without keys.
+// MOCK_EXTERNAL=1 replaces the call to the Anthropic API with a canned answer, for tests without a key.
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
@@ -11,9 +11,6 @@ const root = path.resolve('.');
 if (process.env.MOCK_EXTERNAL) {
   const real = globalThis.fetch;
   globalThis.fetch = async (url, opts) => {
-    if (String(url).includes('api.openai.com')) {
-      return new Response(JSON.stringify({ text: 'Sinusrhythmus, Frequenz etwa siebzig pro Minute, Normtyp, schmaler QRS-Komplex, keine ST-Hebungen.' }), { status: 200 });
-    }
     if (String(url).includes('api.anthropic.com')) {
       const body = JSON.parse(opts.body);
       const user = body.messages[0].content;
