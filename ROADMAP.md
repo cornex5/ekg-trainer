@@ -4,7 +4,7 @@ Open work, roughly in order. Items are goals, not promises.
 
 ## Next
 
-- Simpler, more seamless flow through the app. Decide with the maintainer whether the catalogue ("Mehr") and the error-source training stay as separate areas, get merged, or are hidden.
+- Have the English medical terms in the 41 cases and the grading prompt read by someone with clinical English (EMT, paramedic, physician level).
 - Real-key test of the free-text grading with Claude. So far it ran only against a mocked API.
 - Impressum and Datenschutz pages, needed before the site is opened to the public.
 
@@ -32,5 +32,5 @@ Open work, roughly in order. Items are goals, not promises.
 - Click-to-enlarge with mouse-wheel zoom, caliper, explanation layer, error-source training, live monitor.
 - Landing page in the light clinical style, trainer under `/app/`, 50 mm/s default.
 - Access gate for the whole site.
-- Sidebar layout in the style of the landing page.
+- Sidebar layout in the style of the landing page, flat sections (catalogue and error-source training stay as their own areas).
 - German and English for the landing page, the trainer, all cases and the grading.

@@ -77,6 +77,6 @@ Most of the code was written with an AI coding assistant (Claude) at the author'
 
 Code: MIT, see [LICENSE](LICENSE).
 
-Fonts are self-hosted from `@fontsource` and licensed under the SIL Open Font License 1.1 (texts in `fonts/`): Hanken Grotesk, DM Mono, IBM Plex Sans, IBM Plex Mono.
+Fonts are self-hosted from `@fontsource` and licensed under the SIL Open Font License 1.1 (texts in `fonts/`): Hanken Grotesk and DM Mono.
 
 Reference statistics: Wagner P. et al., PTB-XL, a large publicly available electrocardiography dataset, Scientific Data 2020, https://physionet.org/content/ptb-xl/ (CC BY 4.0). Only summary figures were used; no recordings are shipped.
