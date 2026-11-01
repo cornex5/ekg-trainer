@@ -32,3 +32,5 @@ Open work, roughly in order. Items are goals, not promises.
 - Click-to-enlarge with mouse-wheel zoom, caliper, explanation layer, error-source training, live monitor.
 - Landing page in the light clinical style, trainer under `/app/`, 50 mm/s default.
 - Access gate for the whole site.
+- Sidebar layout in the style of the landing page.
+- German and English for the landing page, the trainer, all cases and the grading.

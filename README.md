@@ -1,6 +1,6 @@
 # EKG-Trainer
 
-A website for practising ECG reading on simulated recordings. Every trace is generated in the browser from a heart-vector model projected onto 12 leads, so there is no stored patient data. The interface is in German.
+A website for practising ECG reading on simulated recordings. Every trace is generated in the browser from a heart-vector model projected onto 12 leads, so there is no stored patient data. The whole site (landing page, trainer, all 41 cases, grading) is available in German and English. The language follows the browser (English as fallback) and can be switched with the DE/EN button; the choice is remembered.
 
 The live site is currently behind an access code while it is in development.
 
@@ -22,6 +22,7 @@ Paramedic students and working paramedics, emergency physicians, residents, and 
 - Error-source training: swapped electrodes, mains hum, baseline wander, muscle noise.
 - Live monitor mode with a running rhythm that changes over time.
 - Catalogue view with measured values per lead for every case.
+- English level names: EMT, Paramedic, Physician, Expert (the German job titles are shown as a hint).
 
 ## Stack
 

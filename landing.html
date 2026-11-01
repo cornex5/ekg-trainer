@@ -76,6 +76,10 @@ section{padding-top:clamp(72px,10vw,130px)}
 .cats b{font-weight:700;display:block}
 .cats span.d{color:var(--mute);font-size:15px}
 @media (max-width:820px){.nav .l{display:none}}
+.lang{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.lang button{font:500 14px var(--mono);color:var(--mute);background:none;border:0;padding:0 12px;min-height:40px;cursor:pointer}
+.lang button:hover{color:var(--ink)}
+.lang button[aria-pressed=true]{background:var(--ink);color:#fff}
 @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
 </head>
@@ -92,6 +96,7 @@ EKG-Trainer
 <a class="l" href="#auswertung">Auswertung</a>
 <a class="l" href="#werkzeuge">Werkzeuge</a>
 <a class="l" href="#realismus">Realismus</a>
+<div class="lang" role="group" aria-label="Language / Sprache"><button type="button" data-lang="de" aria-pressed="false">DE</button><button type="button" data-lang="en" aria-pressed="false">EN</button></div>
 <a class="btn btn-s" href="/app/">Trainer öffnen</a>
 </div>
 </nav>
@@ -250,6 +255,55 @@ EKG-Trainer
 
 <script>
 (function () {
+  var EN = @@EN@@;
+  var KEY = 'ekg-lang';
+  var norm = function (s) { return s.replace(/\s+/g, ' ').trim(); };
+  var nodes = [];
+  var walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  var n;
+  while ((n = walker.nextNode())) {
+    if (n.parentNode.tagName === 'SCRIPT' || n.parentNode.tagName === 'STYLE') continue;
+    var k = norm(n.nodeValue);
+    if (k && EN[k] !== undefined) nodes.push({ node: n, de: n.nodeValue, key: k, lead: n.nodeValue.match(/^\s*/)[0], trail: n.nodeValue.match(/\s*$/)[0] });
+  }
+  var attrs = [];
+  document.querySelectorAll('[aria-label]').forEach(function (e) {
+    if (e.getAttribute('role') === 'group') return;
+    var k = norm(e.getAttribute('aria-label'));
+    if (EN[k] !== undefined) attrs.push({ el: e, de: e.getAttribute('aria-label'), key: k });
+  });
+  var metas = [];
+  document.querySelectorAll('meta[name=description],meta[property="og:title"],meta[property="og:description"]').forEach(function (m) {
+    var k = norm(m.content);
+    if (EN[k] !== undefined) metas.push({ el: m, de: m.content, key: k });
+  });
+  var titleDe = document.title;
+  function detect() {
+    try { var v = localStorage.getItem(KEY); if (v === 'de' || v === 'en') return v; } catch (e) { /* ignore */ }
+    var list = navigator.languages || [navigator.language];
+    for (var i = 0; i < list.length; i++) {
+      var c = String(list[i] || '').toLowerCase().slice(0, 2);
+      if (c === 'de' || c === 'en') return c;
+    }
+    return 'en';
+  }
+  function apply(lang) {
+    var en = lang === 'en';
+    document.documentElement.lang = lang;
+    nodes.forEach(function (o) { o.node.nodeValue = en ? o.lead + EN[o.key] + o.trail : o.de; });
+    attrs.forEach(function (o) { o.el.setAttribute('aria-label', en ? EN[o.key] : o.de); });
+    metas.forEach(function (o) { o.el.content = en ? EN[o.key] : o.de; });
+    document.title = en && EN[titleDe] ? EN[titleDe] : titleDe;
+    document.querySelectorAll('.lang button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.lang === lang ? 'true' : 'false'); });
+  }
+  document.querySelectorAll('.lang button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      try { localStorage.setItem(KEY, b.dataset.lang); } catch (e) { /* ignore */ }
+      apply(b.dataset.lang);
+    });
+  });
+  apply(detect());
+
   var tabs = document.querySelectorAll('#tabs .tab');
   function show(id) {
     tabs.forEach(function (t) {
