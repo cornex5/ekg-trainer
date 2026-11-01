@@ -15,6 +15,8 @@ export const EN_UI = {
   'Lernstand': 'Progress',
   'Lernstand exportieren': 'Export progress',
   'Lernstand löschen': 'Delete progress',
+  'Impressum': 'Legal notice',
+  'Datenschutz': 'Privacy policy',
   'bearbeitet': 'completed',
   'Schnitt': 'Average',
   'fällig': 'due',

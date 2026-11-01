@@ -14,3 +14,17 @@ const landing = readFileSync('landing.html', 'utf8').replace('@@STEMI@@', readFi
   .replace('@@EN@@', () => JSON.stringify(EN_LANDING));
 writeFileSync('dist/index.html', landing);
 console.log('dist/index.html', landing.length, 'bytes');
+
+const legal = readFileSync('legal.html', 'utf8');
+const pages = [
+  ['impressum', 'Impressum', 'Legal notice'],
+  ['datenschutz', 'Datenschutz', 'Privacy policy'],
+];
+for (const [slug, de, en] of pages) {
+  const body = readFileSync(`legal/${slug}.html`, 'utf8');
+  const out = legal.replace('@@TITLE_DE_JSON@@', () => JSON.stringify(de)).replace('@@TITLE_EN_JSON@@', () => JSON.stringify(en))
+    .replace('@@TITLE_DE@@', de).replace('@@BODY@@', () => body);
+  mkdirSync(`dist/${slug}`, { recursive: true });
+  writeFileSync(`dist/${slug}/index.html`, out);
+  console.log(`dist/${slug}/index.html`, out.length, 'bytes');
+}

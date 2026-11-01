@@ -6,7 +6,6 @@ Open work, roughly in order. Items are goals, not promises.
 
 - Have the English medical terms in the 41 cases and the grading prompt read by someone with clinical English (EMT, paramedic, physician level).
 - Real-key test of the free-text grading with Claude. So far it ran only against a mocked API.
-- Impressum and Datenschutz pages, needed before the site is opened to the public.
 
 ## Launch
 
@@ -27,6 +26,7 @@ Open work, roughly in order. Items are goals, not promises.
 
 ## Done
 
+- Impressum and Datenschutz pages in German and English, linked from the landing page and the app sidebar.
 - Simulation of 41 cases with a heart-vector model, rhythm scheduler and 12-lead output.
 - Four reading levels with wizard, step form and graded free text.
 - Click-to-enlarge with mouse-wheel zoom, caliper, explanation layer, error-source training, live monitor.

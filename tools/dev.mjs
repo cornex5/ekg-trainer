@@ -60,7 +60,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  const page = url.pathname.startsWith('/app') ? path.join('app', 'index.html') : 'index.html';
+  const first = url.pathname.split('/')[1];
+  const page = ['app', 'impressum', 'datenschutz'].includes(first) ? path.join(first, 'index.html') : 'index.html';
   res.end(readFileSync(path.join(root, 'dist', page)));
 });
 server.listen(port, () => console.log(`http://localhost:${port}`));

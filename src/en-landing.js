@@ -3,6 +3,8 @@ export const EN_LANDING = {
   'EKG-Trainer: EKGs befunden, passend zum Niveau': 'EKG-Trainer: read ECGs at your own level',
   'Simulierte 12-Kanal-EKGs und Monitorstreifen für Rettungsdienst, Notaufnahme und Kardiologie. Fragenkette, Formular oder Freitext, Auswertung Punkt für Punkt. Momentan kostenlos.': 'Simulated 12-lead ECGs and monitor strips for emergency medical services, emergency departments and cardiology. Question chain, form or free text, graded point by point. Free for now.',
   'Ein Fall, ein EKG, Dein Befund. 41 simulierte Fälle in 8 Kategorien, vier Niveaus, momentan kostenlos.': 'One case, one ECG, your report. 41 simulated cases in 8 categories, four levels, free for now.',
+  'Impressum': 'Legal notice',
+  'Datenschutz': 'Privacy policy',
   'Hauptnavigation': 'Main navigation',
   'Ablauf': 'How it works',
   'Auswertung': 'Grading',

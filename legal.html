@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>@@TITLE_DE@@ | EKG-Trainer</title>
+<style>
+@font-face{font-family:'Hanken Grotesk';font-weight:400;font-display:swap;src:url(/fonts/hanken-grotesk-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Hanken Grotesk';font-weight:700;font-display:swap;src:url(/fonts/hanken-grotesk-latin-700-normal.woff2) format('woff2')}
+:root{--bg:#f1f5f7;--ink:#0f2230;--body:#33454f;--line:#d5dee4;--teal:#0b6f6b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--body);font:17px/1.6 'Hanken Grotesk','Helvetica Neue',Arial,sans-serif}
+main{max-width:760px;margin:0 auto;padding:32px max(20px,env(safe-area-inset-left,0px)) 64px}
+a{color:var(--teal)}
+:focus-visible{outline:3px solid var(--teal);outline-offset:3px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+.top a{font-weight:700;text-decoration:none;min-height:44px;display:inline-flex;align-items:center}
+.lang{display:inline-flex;border:1.5px solid var(--line);border-radius:8px;overflow:hidden}
+.lang button{background:#fff;border:0;color:var(--ink);font:600 14px monospace;padding:0 14px;min-height:40px;cursor:pointer}
+.lang button[aria-pressed=true]{background:var(--ink);color:#fff}
+h1{color:var(--ink);font-size:clamp(30px,5vw,42px);line-height:1.1;margin:0 0 20px}
+h2{color:var(--ink);font-size:20px;margin:30px 0 6px}
+p{margin:0 0 12px}
+address{font-style:normal}
+html[lang=de] .en,html[lang=en] .de{display:none}
+.foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:15px}
+.foot a{margin-right:18px}
+</style>
+</head>
+<body>
+<main>
+<div class="top">
+  <a href="/"><span class="de">Zur Startseite</span><span class="en">Back to the start page</span></a>
+  <div class="lang" role="group" aria-label="Sprache / Language">
+    <button data-l="de" aria-pressed="false">DE</button>
+    <button data-l="en" aria-pressed="false">EN</button>
+  </div>
+</div>
+
+@@BODY@@
+
+<p class="foot"><a href="/impressum/"><span class="de">Impressum</span><span class="en">Legal notice</span></a><a href="/datenschutz/"><span class="de">Datenschutz</span><span class="en">Privacy policy</span></a></p>
+</main>
+<script>
+(function () {
+  var KEY = 'ekg-lang';
+  var de = @@TITLE_DE_JSON@@, en = @@TITLE_EN_JSON@@;
+  function detect() {
+    try { var v = localStorage.getItem(KEY); if (v === 'de' || v === 'en') return v; } catch (e) {}
+    var l = navigator.languages || [navigator.language];
+    for (var i = 0; i < l.length; i++) { var c = String(l[i] || '').toLowerCase().slice(0, 2); if (c === 'de' || c === 'en') return c; }
+    return 'en';
+  }
+  function apply(lang) {
+    document.documentElement.lang = lang;
+    document.title = (lang === 'en' ? en : de) + ' | EKG-Trainer';
+    document.querySelectorAll('.lang button').forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.l === lang ? 'true' : 'false'); });
+  }
+  document.querySelectorAll('.lang button').forEach(function (b) {
+    b.addEventListener('click', function () { try { localStorage.setItem(KEY, b.dataset.l); } catch (e) {} apply(b.dataset.l); });
+  });
+  apply(detect());
+})();
+</script>
+</body>
+</html>
