@@ -66,7 +66,7 @@ Not a medical device. For education and training only, not for decisions about p
 
 ## History note
 
-An early commit (`2544624`) contained an excerpt of 20 real ECGs from PTB-XL (CC BY 4.0, Wagner et al., PhysioNet, de-identified, 100 Hz) for a blind test "real or simulated". The excerpt and the blind test were removed later because the project is meant to run on simulated data only. The file stays visible in the git history.
+An early commit (`2544624`) contained an excerpt of 20 real ECGs from PTB-XL (CC BY 4.0, Wagner et al., PhysioNet, de-identified, 100 Hz) for a blind test "real or simulated". The excerpt and the blind test were removed later because the project is meant to run on simulated data only. The file, and the built `dist/` bundles that were committed in the first versions and embedded it, stay visible in the git history.
 
 ## Development
 
