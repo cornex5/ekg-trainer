@@ -51,7 +51,7 @@ See `.env.example`.
 | --- | --- | --- |
 | `ANTHROPIC_API_KEY` | free-text grading | Without it the trainer works, only the Claude grading is disabled. |
 | `CLAUDE_MODEL` | free-text grading | Optional, defaults to `claude-sonnet-5-5`. |
-| `ACCESS_CODE` | site gate | Optional. When set, every page and API route asks for it (HTTP Basic, any user name). |
+| `ACCESS_CODE` | site gate | Optional. When set, every page and API route needs it (login page with a cookie; HTTP Basic with any user name also works for scripts). |
 
 Keys are set as Vercel environment variables and are never part of the repository.
 
