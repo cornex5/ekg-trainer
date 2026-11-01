@@ -1,4 +1,5 @@
 // Decision wizard for the lowest level: a chain of simple questions that ends in a rhythm.
+import { t } from './i18n.js';
 export const STEPS = [
   {
     id: 'base',
@@ -103,7 +104,7 @@ const LABEL = {
   early: { no: 'keine', yes: 'vorzeitige Schläge' },
   st: { none: 'keine Hebung', inf: 'Hebung unten (II, III, aVF)', ant: 'Hebung Vorderwand (V1 bis V5)', lat: 'Hebung Seitenwand (I, aVL, V5, V6)' },
 };
-export const labelOf = (step, v) => (LABEL[step] && LABEL[step][v]) || v;
+export const labelOf = (step, v) => (LABEL[step] && LABEL[step][v] ? t(LABEL[step][v]) : v);
 
 const NAME = { base: 'Gesamtbild', regular: 'Regelmäßigkeit', qrs: 'QRS-Breite', p: 'P-Wellen', early: 'Vorzeitige Schläge', st: 'ST-Strecke' };
 const WHY = {
@@ -129,7 +130,7 @@ export function review(a, facts) {
   for (const s of stepsFor(a)) {
     if (s.id === 'rate' || a[s.id] === undefined) continue;
     const ok = a[s.id] === truth[s.id];
-    rows.push({ label: NAME[s.id], mine: labelOf(s.id, a[s.id]), right: labelOf(s.id, truth[s.id]), ok, why: WHY[s.id][truth[s.id]] });
+    rows.push({ label: t(NAME[s.id]), mine: labelOf(s.id, a[s.id]), right: labelOf(s.id, truth[s.id]), ok, why: t(WHY[s.id][truth[s.id]]) });
   }
   return rows;
 }

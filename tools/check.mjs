@@ -2,7 +2,13 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { generate } from '../src/engine.js';
-import { SCENARIOS } from '../src/scenarios.js';
+import { SCENARIOS, CATEGORIES } from '../src/scenarios.js';
+import { RHYTHMS, AXES, FINDINGS } from '../src/truth.js';
+import { CONTEXT } from '../src/context.js';
+import { ERRORS } from '../src/errors.js';
+import { LIVE } from '../src/livescen.js';
+import { STEPS } from '../src/wizard.js';
+import { EN } from '../src/en.js';
 
 let failed = 0;
 const fail = (msg) => {
@@ -34,6 +40,26 @@ for (const sc of SCENARIOS) {
   }
 }
 console.log(`${SCENARIOS.length} cases checked`);
+
+// Every German source string of the data must have an English entry.
+const need = new Set([...CATEGORIES, ...Object.values(CONTEXT), ...LIVE.map((l) => l.title)]);
+for (const sc of SCENARIOS) {
+  need.add(sc.title);
+  sc.solution.forEach((x) => need.add(x));
+}
+RHYTHMS.forEach((r) => need.add(r[1]));
+AXES.forEach((a) => need.add(a[1]));
+Object.values(FINDINGS).forEach((f) => f.forEach((x) => need.add(x)));
+ERRORS.forEach((e) => need.add(e[1]));
+ERRORS.forEach((e) => need.add(e[2]));
+STEPS.forEach((st) => {
+  need.add(st.q);
+  if (st.hint) need.add(st.hint);
+  (st.opts || []).forEach((o) => need.add(o[1]));
+});
+const gaps = [...need].filter((x) => EN[x] === undefined);
+gaps.forEach((x) => fail(`no English text for: ${x}`));
+console.log(`${need.size} data strings, ${gaps.length} without English`);
 
 execFileSync(process.execPath, ['tools/bundle.mjs'], { stdio: 'inherit' });
 for (const f of ['dist/index.html', 'dist/app/index.html']) {

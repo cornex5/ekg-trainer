@@ -1,7 +1,9 @@
 import { RHYTHMS, AXES, FINDINGS, TRUTH } from './truth.js';
 import { measure } from './measure.js';
+import { t } from './i18n.js';
 
-const rhythmLabel = (id) => RHYTHMS.find((r) => r[0] === id)[1];
+const rhythmDe = (id) => RHYTHMS.find((r) => r[0] === id)[1];
+const rhythmLabel = (id) => t(rhythmDe(id));
 const axisOf = (deg) => AXES.find((a) => deg >= a[2] && deg < a[3]) ?? AXES[1];
 
 // Compare one reading against the case. Every item carries its own points and a reason,
@@ -14,11 +16,11 @@ export function grade(sig, sc, ans, level) {
 
   const rhythmOk = ans.rhythm === truth.rhythm || (truth.alt ?? []).includes(ans.rhythm);
   items.push({
-    label: 'Rhythmus',
+    label: t('Rhythmus'),
     max: 30,
     pts: rhythmOk ? 30 : 0,
     ok: rhythmOk,
-    answer: ans.rhythm ? rhythmLabel(ans.rhythm) : 'keine Angabe',
+    answer: ans.rhythm ? rhythmLabel(ans.rhythm) : t('keine Angabe'),
     right: rhythmLabel(truth.rhythm),
   });
 
@@ -27,12 +29,12 @@ export function grade(sig, sc, ans, level) {
     const tol = Math.max(8, m.hr * 0.1);
     const rateOk = Number.isFinite(rate) && ans.rate !== '' && Math.abs(rate - m.hr) <= tol;
     items.push({
-      label: 'Frequenz',
+      label: t('Frequenz'),
       max: 15,
       pts: rateOk ? 15 : 0,
       ok: rateOk,
-      answer: ans.rate === '' ? 'keine Angabe' : `${rate}/min`,
-      right: `${m.hr}/min (Toleranz plus/minus ${Math.round(tol)})`,
+      answer: ans.rate === '' ? t('keine Angabe') : t('{n}/min', { n: rate }),
+      right: t('{n}/min (Toleranz plus/minus {tol})', { n: m.hr, tol: Math.round(tol) }),
     });
   }
 
@@ -42,25 +44,25 @@ export function grade(sig, sc, ans, level) {
     const near = given && (m.axis >= given[2] - 10 && m.axis < given[3] + 10);
     const full = given && given[0] === a[0];
     items.push({
-      label: 'Lagetyp',
+      label: t('Lagetyp'),
       max: 10,
       pts: full ? 10 : near ? 6 : 0,
       ok: !!full,
-      answer: given ? given[1] : 'keine Angabe',
-      right: `${a[1]} (gemessen ${m.axis} Grad)`,
-      note: !full && near ? 'Grenzbereich: knapp daneben, Teilpunkte.' : undefined,
+      answer: given ? t(given[1]) : t('keine Angabe'),
+      right: t('{a} (gemessen {d} Grad)', { a: t(a[1]), d: m.axis }),
+      note: !full && near ? t('Grenzbereich: knapp daneben, Teilpunkte.') : undefined,
     });
 
     const wide = m.qrsMs >= 120;
     const border = m.qrsMs >= 110 && m.qrsMs <= 130;
     const qOk = ans.qrs === (wide ? 'wide' : 'narrow') || (border && ans.qrs);
     items.push({
-      label: 'QRS-Breite',
+      label: t('QRS-Breite'),
       max: 10,
       pts: qOk ? 10 : 0,
       ok: !!qOk,
-      answer: ans.qrs === 'wide' ? 'breit (120 ms und mehr)' : ans.qrs === 'narrow' ? 'schmal (unter 120 ms)' : 'keine Angabe',
-      right: `${wide ? 'breit' : 'schmal'} (${m.qrsMs} ms)`,
+      answer: ans.qrs === 'wide' ? t('breit (120 ms und mehr)') : ans.qrs === 'narrow' ? t('schmal (unter 120 ms)') : t('keine Angabe'),
+      right: `${t(wide ? 'breit' : 'schmal')} (${m.qrsMs} ms)`,
     });
   }
 
@@ -76,14 +78,14 @@ export function grade(sig, sc, ans, level) {
   else fPts = share * Math.max(0, (hits - wrong * 0.5) / want.size);
   fPts = Math.round(fPts);
   items.push({
-    label: 'Zusatzbefunde',
+    label: t('Zusatzbefunde'),
     max: share,
     pts: fPts,
     ok: fPts === share,
-    answer: got.size ? [...got].map((f) => FINDINGS[f][0]).join(', ') : 'keine',
-    right: want.size ? [...want].map((f) => FINDINGS[f][0]).join(', ') : 'keine (kein weiterer Befund)',
-    reasons: missed.map((f) => `${FINDINGS[f][0]}: ${FINDINGS[f][1]}`),
-    extra: [...got].filter((f) => !want.has(f)).map((f) => FINDINGS[f][0]),
+    answer: got.size ? [...got].map((f) => t(FINDINGS[f][0])).join(', ') : t('keine'),
+    right: want.size ? [...want].map((f) => t(FINDINGS[f][0])).join(', ') : t('keine (kein weiterer Befund)'),
+    reasons: missed.map((f) => `${t(FINDINGS[f][0])}: ${t(FINDINGS[f][1])}`),
+    extra: [...got].filter((f) => !want.has(f)).map((f) => t(FINDINGS[f][0])),
   });
 
   const max = items.reduce((s, i) => s + i.max, 0);
@@ -98,8 +100,8 @@ export function truthSummary(sig, sc, context) {
   const arrest = truth.rhythm === 'vf' || truth.rhythm === 'asystole';
   const a = axisOf(m.axis);
   return {
-    rhythmus: rhythmLabel(truth.rhythm),
-    rhythmus_auch_akzeptiert: (truth.alt ?? []).map(rhythmLabel),
+    rhythmus: rhythmDe(truth.rhythm),
+    rhythmus_auch_akzeptiert: (truth.alt ?? []).map(rhythmDe),
     frequenz_pro_min: arrest ? null : m.hr,
     lagetyp: arrest ? null : `${a[1]}, gemessen ${m.axis} Grad`,
     qrs_ms: arrest ? null : m.qrsMs,

@@ -12,10 +12,21 @@ import { record, stats, pick, exportJson, reset } from './src/store.js';
 import { apiStatus, evaluate, getCode, setCode } from './src/api.js';
 import { stepsFor, derive, answersToForm, labelOf, review } from './src/wizard.js';
 import { createZoom } from './src/zoom.js';
+import { t, getLang, setLang, onLang, applyDom, dec } from './src/i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const LEVELS = ['rs', 'notsan', 'arzt', 'experte'];
+function savedLevel() {
+  try {
+    const v = localStorage.getItem('ekg-level');
+    if (LEVELS.includes(v)) return v;
+  } catch (e) {
+    /* ignore */
+  }
+  return 'rs';
+}
 const state = {
+  level: savedLevel(),
   tab: 'read',
   sc: SCENARIOS[0],
   seedOffset: 0,
@@ -27,14 +38,14 @@ const state = {
 };
 
 // ---------- helpers ----------
-const level = () => $('level').value;
+const level = () => state.level;
 const catIdx = () => ($('cat').value === '' ? null : Number($('cat').value));
 function pool() {
   const max = LEVELS.indexOf(level());
   const c = catIdx();
   return SCENARIOS.filter((s) => LEVELS.indexOf(s.level) <= max && (c === null || s.cat === c));
 }
-const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+const esc = (x) => String(x).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const mm = (v) => (v * 10).toFixed(1);
 function fmt(v, lo, hi) {
   const ok = v >= lo && v <= hi;
@@ -42,12 +53,22 @@ function fmt(v, lo, hi) {
 }
 
 // ---------- static fills ----------
-$('cat').innerHTML = '<option value="">alle Kategorien</option>' + CATEGORIES.map((c, i) => `<option value="${i}">${esc(c)}</option>`).join('');
-$('fRhythm').innerHTML = '<option value="">bitte wählen</option>' + RHYTHMS.map((r) => `<option value="${r[0]}">${esc(r[1])}</option>`).join('');
-$('fAxis').innerHTML = '<option value="">bitte wählen</option>' + AXES.map((a) => `<option value="${a[0]}">${esc(a[1])}</option>`).join('');
-$('fFind').innerHTML = Object.entries(FINDINGS)
-  .map(([id, f]) => `<label><input type="checkbox" value="${id}"> ${esc(f[0])}</label>`)
-  .join('');
+const ttl = (sc) => t(sc.title);
+const sols = (sc) => sc.solution.map((x) => t(x));
+const li = (list) => list.map((x) => `<li>${esc(x)}</li>`).join('');
+
+function fillStatic() {
+  const cat = $('cat').value;
+  $('cat').innerHTML = `<option value="">${esc(t('alle Kategorien'))}</option>` + CATEGORIES.map((c, i) => `<option value="${i}">${esc(t(c))}</option>`).join('');
+  $('cat').value = cat;
+  const pick1 = `<option value="">${esc(t('bitte wählen'))}</option>`;
+  $('fRhythm').innerHTML = pick1 + RHYTHMS.map((r) => `<option value="${r[0]}">${esc(t(r[1]))}</option>`).join('');
+  $('fAxis').innerHTML = pick1 + AXES.map((a) => `<option value="${a[0]}">${esc(t(a[1]))}</option>`).join('');
+  $('fFind').innerHTML = Object.entries(FINDINGS)
+    .map(([id, f]) => `<label><input type="checkbox" value="${id}"> ${esc(t(f[0]))}</label>`)
+    .join('');
+}
+fillStatic();
 
 function fillScenarios() {
   const sel = $('scenario');
@@ -56,11 +77,11 @@ function fillScenarios() {
     const list = SCENARIOS.filter((s) => s.cat === ci);
     if (!list.length) return;
     const g = document.createElement('optgroup');
-    g.label = cat;
+    g.label = t(cat);
     for (const s of list) {
       const o = document.createElement('option');
       o.value = s.id;
-      o.textContent = s.title;
+      o.textContent = ttl(s);
       g.appendChild(o);
     }
     sel.appendChild(g);
@@ -79,16 +100,16 @@ function marksFor(sig) {
   const atr = sig.sched.atrial.filter((a) => a.t > 0.2 && a.t < sig.duration - 0.3);
   const D = sig.morph.qrs;
   let first = 0;
-  for (const a of atr) out.push({ t0: a.t, t1: a.t + 0.1, color: '#1f5fa8', label: first++ < 2 ? 'P' : '' });
+  for (const a of atr) out.push({ t0: a.t, t1: a.t + 0.1, color: '#1f5fa8', label: first++ < 2 ? t('P') : '' });
   first = 0;
   for (let bi = 0; bi < vent.length; bi++) {
     const b = vent[bi];
     const next = vent[bi + 1] ? vent[bi + 1].t - 0.03 : Infinity;
     const lab = first++ < 2;
     const pvc = b.morph === 'pvc';
-    out.push({ t0: b.t, t1: b.t + (pvc ? 0.14 : D), color: '#a8201a', label: lab ? (pvc ? 'VES' : 'QRS') : '' });
+    out.push({ t0: b.t, t1: b.t + (pvc ? 0.14 : D), color: '#a8201a', label: lab ? (pvc ? t('VES') : t('QRS')) : '' });
     const qt = Math.max(0.2, sig.morph.qtc * Math.cbrt(b.rr || 0.8));
-    out.push({ t0: b.t + (pvc ? 0.14 : D), t1: Math.min(b.t + qt, next), color: '#1f6b3a', label: lab ? 'ST und T' : '', low: true });
+    out.push({ t0: b.t + (pvc ? 0.14 : D), t1: Math.min(b.t + qt, next), color: '#1f6b3a', label: lab ? t('ST und T') : '', low: true });
   }
   return out;
 }
@@ -96,7 +117,7 @@ function marksFor(sig) {
 function updateStageInfo() {
   const mon = state.mode === 'monitor';
   $('btnZoom').disabled = mon;
-  $('stageInfo').textContent = mon ? `Monitor, Ableitung II · ${$('gain').value} mm/mV` : `12 Ableitungen · ${$('speed').value} mm/s · ${$('gain').value} mm/mV`;
+  $('stageInfo').textContent = mon ? `${t('Monitor, Ableitung II')} · ${$('gain').value} mm/mV` : `${t('12 Ableitungen')} · ${$('speed').value} mm/s · ${$('gain').value} mm/mV`;
 }
 
 function redrawPaper() {
@@ -141,7 +162,7 @@ function drawCaliper() {
     if (old) old.remove();
   }
   if (!svgs.length || !tools.pts.length) {
-    setCalText(tools.caliper ? 'Messzirkel: zwei Punkte im EKG anklicken. Ein dritter Klick beginnt neu.' : '');
+    setCalText(tools.caliper ? t('Messzirkel: zwei Punkte im EKG anklicken. Ein dritter Klick beginnt neu.') : '');
     return;
   }
   const speed = Number($('speed').value);
@@ -154,10 +175,10 @@ function drawCaliper() {
     const dx = Math.abs(x2 - x1);
     const dy = Math.abs(y2 - y1);
     const ms = Math.round((dx / speed) * 1000);
-    const mv = (dy / gain).toFixed(2).replace('.', ',');
-    setCalText('', `Messzirkel: <b>${ms} ms</b> (${dx.toFixed(1)} mm waagerecht, entspricht ${ms ? Math.round(60000 / ms) : '-'}/min als Abstand), <b>${mv} mV</b> (${dy.toFixed(1)} mm senkrecht).`);
+    const mv = dec((dy / gain).toFixed(2));
+    setCalText('', t('Messzirkel: <b>{ms} ms</b> ({dx} mm waagerecht, entspricht {bpm}/min als Abstand), <b>{mv} mV</b> ({dy} mm senkrecht).', { ms, dx: dec(dx.toFixed(1)), bpm: ms ? Math.round(60000 / ms) : '-', mv, dy: dec(dy.toFixed(1)) }));
   } else {
-    setCalText('Zweiten Punkt anklicken.');
+    setCalText(t('Zweiten Punkt anklicken.'));
   }
   g += '</g>';
   for (const svg of svgs) svg.insertAdjacentHTML('beforeend', g);
@@ -237,7 +258,9 @@ function newCase() {
 }
 
 // ---------- Befunden ----------
-const LEVEL_NAME = { rs: 'Rettungssanitäter', notsan: 'Notfallsanitäter', arzt: 'Arzt', experte: 'Experte' };
+const LEVEL_DE = { rs: 'Rettungssanitäter', notsan: 'Notfallsanitäter', arzt: 'Arzt', experte: 'Experte' };
+// English names carry the German job title as a hint, except for Expert.
+const levelName = (l) => (getLang() === 'en' && l !== 'experte' ? `${t(LEVEL_DE[l])} (${LEVEL_DE[l]})` : t(LEVEL_DE[l]));
 const read = { mode: 'wz', wz: { a: {}, i: 0 }, step: 0, alt: false, status: undefined };
 const ST_STEPS = 3;
 
@@ -259,7 +282,7 @@ function resetRead() {
   $('result').classList.add('hidden');
   $('btnNext').classList.add('hidden');
   const kind = { wz: 'Schritt für Schritt', steps: 'Schritt-Formular', free: 'Freitext, ausgewertet von Claude' }[read.mode];
-  $('readTag').textContent = `${LEVEL_NAME[level()]}: ${kind}`;
+  $('readTag').textContent = `${levelName(level())}: ${t(kind)}`;
   if (read.mode === 'wz') {
     read.wz = { a: {}, i: 0 };
     renderWz();
@@ -281,7 +304,7 @@ function resetRead() {
     $('freeAlt').classList.remove('hidden');
     $('freeErr').classList.add('hidden');
     $('freeHint').textContent = '';
-    $('fGuide').innerHTML = GUIDE[level()].map((t) => `<li>${esc(t)}</li>`).join('');
+    $('fGuide').innerHTML = li(GUIDE[level()].map((x) => t(x)));
     checkStatus();
   }
 }
@@ -296,8 +319,8 @@ async function checkStatus() {
   const st = read.status;
   $('vCodeWrap').classList.toggle('hidden', !(st && st.needsCode));
   if (read.mode !== 'free') return;
-  if (!st) showFreeErr('Der Server ist nicht erreichbar. Nutze solange das Schritt-Formular.');
-  else if (!st.evaluate) showFreeErr('Die Bewertung ist auf dem Server noch nicht eingerichtet. Nutze solange das Schritt-Formular.');
+  if (!st) showFreeErr(t('Der Server ist nicht erreichbar. Nutze solange das Schritt-Formular.'));
+  else if (!st.evaluate) showFreeErr(t('Die Bewertung ist auf dem Server noch nicht eingerichtet. Nutze solange das Schritt-Formular.'));
 }
 function showFreeErr(msg) {
   $('freeErr').textContent = msg;
@@ -317,21 +340,21 @@ function renderWz() {
   const steps = stepsFor(w.a);
   dots($('wzDots'), steps.length + 1, w.i);
   $('wzBack').disabled = w.i === 0;
-  const done = steps.slice(0, w.i).map((s) => (s.id === 'rate' ? `${w.a.rate}/min` : labelOf(s.id, w.a[s.id])));
-  $('wzSum').innerHTML = done.map((t) => `<span>${esc(t)}</span>`).join('');
+  const done = steps.slice(0, w.i).map((s) => (s.id === 'rate' ? t('{n}/min', { n: w.a.rate }) : labelOf(s.id, w.a[s.id])));
+  $('wzSum').innerHTML = done.map((x) => `<span>${esc(x)}</span>`).join('');
   if (w.i >= steps.length) {
     const sug = derive(w.a);
-    $('wzBody').innerHTML = `<p class="wq">Dein Befund</p><p class="wh">Aus Deinen Antworten ergibt sich dieser Rhythmus. Du kannst ihn ändern, bevor Du auswertest.</p>
-      <label>Rhythmus<select id="wzRhythm">${RHYTHMS.map((r) => `<option value="${r[0]}"${r[0] === sug ? ' selected' : ''}>${esc(r[1])}</option>`).join('')}</select></label>
-      <div class="actions"><button class="primary" data-go="1">Auswerten</button></div>`;
+    $('wzBody').innerHTML = `<p class="wq">${esc(t('Dein Befund'))}</p><p class="wh">${esc(t('Aus Deinen Antworten ergibt sich dieser Rhythmus. Du kannst ihn ändern, bevor Du auswertest.'))}</p>
+      <label>${esc(t('Rhythmus'))}<select id="wzRhythm">${RHYTHMS.map((r) => `<option value="${r[0]}"${r[0] === sug ? ' selected' : ''}>${esc(t(r[1]))}</option>`).join('')}</select></label>
+      <div class="actions"><button class="primary" data-go="1">${esc(t('Auswerten'))}</button></div>`;
     return;
   }
   const s = steps[w.i];
-  let body = `<p class="wq">${esc(s.q)}</p><p class="wh">${esc(s.hint || '')}</p>`;
+  let body = `<p class="wq">${esc(t(s.q))}</p><p class="wh">${esc(s.hint ? t(s.hint) : '')}</p>`;
   if (s.type === 'number') {
-    body += `<div class="numrow"><input type="number" id="wzRate" min="10" max="400" inputmode="numeric" value="${esc(w.a.rate ?? '')}" aria-label="Frequenz pro Minute"><span class="small">pro Minute</span><button class="primary" data-rate="1">Weiter</button></div><div class="small" id="wzErr" style="margin-top:6px"></div>`;
+    body += `<div class="numrow"><input type="number" id="wzRate" min="10" max="400" inputmode="numeric" value="${esc(w.a.rate ?? '')}" aria-label="${esc(t('Frequenz pro Minute'))}"><span class="small">${esc(t('pro Minute'))}</span><button class="primary" data-rate="1">${esc(t('Weiter'))}</button></div><div class="small" id="wzErr" style="margin-top:6px"></div>`;
   } else {
-    body += `<div class="big">${s.opts.map(([v, t]) => `<button data-v="${v}" class="${w.a[s.id] === v ? 'sel' : ''}">${esc(t)}</button>`).join('')}</div>`;
+    body += `<div class="big">${s.opts.map(([v, x]) => `<button data-v="${v}" class="${w.a[s.id] === v ? 'sel' : ''}">${esc(t(x))}</button>`).join('')}</div>`;
   }
   $('wzBody').innerHTML = body;
   const inp = $('wzRate');
@@ -347,7 +370,7 @@ function wzAnswer(v) {
 function wzRate() {
   const v = Number($('wzRate').value);
   if (!Number.isFinite(v) || $('wzRate').value === '' || v < 10 || v > 400) {
-    $('wzErr').textContent = 'Gib eine Frequenz zwischen 10 und 400 ein.';
+    $('wzErr').textContent = t('Gib eine Frequenz zwischen 10 und 400 ein.');
     return;
   }
   wzAnswer(String(Math.round(v)));
@@ -365,7 +388,7 @@ function showStep() {
   for (const el of $('form').querySelectorAll('.fstep')) el.classList.toggle('hidden', Number(el.dataset.step) !== read.step);
   dots($('stDots'), ST_STEPS, read.step);
   $('stBack').disabled = read.step === 0;
-  $('stNext').textContent = read.step === ST_STEPS - 1 ? 'Auswerten' : 'Weiter';
+  $('stNext').textContent = t(read.step === ST_STEPS - 1 ? 'Auswerten' : 'Weiter');
 }
 function stepNext() {
   if (read.step === 0 && !$('fRhythm').value) {
@@ -397,14 +420,14 @@ async function gradeFree() {
   const text = $('freeText').value.trim();
   $('freeErr').classList.add('hidden');
   if (text.length < 8) {
-    $('freeHint').textContent = 'Schreibe zuerst Deinen Befund.';
+    $('freeHint').textContent = t('Schreibe zuerst Deinen Befund.');
     return;
   }
-  $('freeHint').innerHTML = '<span class="spin"></span>Claude bewertet den Befund ...';
+  $('freeHint').innerHTML = `<span class="spin"></span>${esc(t('Claude bewertet den Befund ...'))}`;
   $('freeGo').disabled = true;
   try {
     const ctxText = $('chkCtx').checked ? CONTEXT[state.sc.id] : undefined;
-    const b = await evaluate({ text, level: level(), fall: truthSummary(state.sig, state.sc, ctxText) });
+    const b = await evaluate({ text, level: level(), lang: getLang(), fall: truthSummary(state.sig, state.sc, ctxText) });
     const pct = Math.max(0, Math.min(100, Math.round(Number(b.punkte) || 0)));
     $('result').innerHTML = freeResultHtml(b, pct);
     afterGrade(pct);
@@ -415,7 +438,7 @@ async function gradeFree() {
   } catch (e) {
     showFreeErr(e.message);
     if (e.kind === 'access_code') $('vCodeWrap').classList.remove('hidden');
-    $('freeHint').textContent = 'Der Text bleibt erhalten, Du kannst es erneut versuchen.';
+    $('freeHint').textContent = t('Der Text bleibt erhalten, Du kannst es erneut versuchen.');
     $('freeGo').disabled = false;
   }
 }
@@ -423,17 +446,17 @@ async function gradeFree() {
 function freeResultHtml(b, pct) {
   const rows = (b.items || [])
     .map(
-      (i) => `<div class="res-item"><div class="res-head"><span>${esc(i.aspekt)}</span><span class="verdict v-${esc(i.urteil)}">${esc(i.urteil)}</span></div>
-      <div class="cols"><div><span>Du hast geschrieben</span>${esc(i.gesagt)}</div><div><span>Erwartet</span>${esc(i.erwartet)}</div></div>
+      (i) => `<div class="res-item"><div class="res-head"><span>${esc(i.aspekt)}</span><span class="verdict v-${esc(i.urteil)}">${esc(t(i.urteil))}</span></div>
+      <div class="cols"><div><span>${esc(t('Du hast geschrieben'))}</span>${esc(i.gesagt)}</div><div><span>${esc(t('Erwartet'))}</span>${esc(i.erwartet)}</div></div>
       ${i.kommentar ? `<div class="small" style="margin-top:4px">${esc(i.kommentar)}</div>` : ''}</div>`,
     )
     .join('');
   const invented = (b.erfunden || []).length
-    ? `<div class="res-item"><div class="res-head"><span>Nicht zum EKG passend</span></div><ul class="sol">${b.erfunden.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`
+    ? `<div class="res-item"><div class="res-head"><span>${esc(t('Nicht zum EKG passend'))}</span></div><ul class="sol">${li(b.erfunden)}</ul></div>`
     : '';
   return `<div class="score">${pct} %</div><p style="margin:6px 0 10px">${esc(b.zusammenfassung)}</p>${rows}${invented}
-    <div class="res-item"><div class="res-head"><span>Musterbefund</span></div><blockquote>${esc(b.musterbefund)}</blockquote></div>
-    <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+    <div class="res-item"><div class="res-head"><span>${esc(t('Musterbefund'))}</span></div><blockquote>${esc(b.musterbefund)}</blockquote></div>
+    <div class="res-item"><div class="res-head"><span>${esc(t('Lösung im Zusammenhang'))}</span></div><ul class="sol">${li(sols(state.sc))}</ul></div>`;
 }
 
 // ----- shared result
@@ -451,20 +474,20 @@ function finishRead(g, route) {
   const rows = g.items
     .map((i) => {
       let extra = '';
-      if (i.reasons && i.reasons.length) extra += `<div class="small">Übersehen: ${i.reasons.map(esc).join(' ')}</div>`;
-      if (i.extra && i.extra.length) extra += `<div class="small">Nicht zutreffend angekreuzt: ${i.extra.map(esc).join(', ')}</div>`;
+      if (i.reasons && i.reasons.length) extra += `<div class="small">${esc(t('Übersehen:'))} ${i.reasons.map(esc).join(' ')}</div>`;
+      if (i.extra && i.extra.length) extra += `<div class="small">${esc(t('Nicht zutreffend angekreuzt:'))} ${i.extra.map(esc).join(', ')}</div>`;
       if (i.note) extra += `<div class="small">${esc(i.note)}</div>`;
-      return `<div class="res-item"><div class="res-head"><span>${esc(i.label)}</span><span class="${i.ok ? 'ok' : 'bad'}">${i.pts} von ${i.max}</span></div>
-        <div class="small">Deine Antwort: ${esc(i.answer)}</div><div class="small">Richtig: ${esc(i.right)}</div>${extra}</div>`;
+      return `<div class="res-item"><div class="res-head"><span>${esc(i.label)}</span><span class="${i.ok ? 'ok' : 'bad'}">${esc(t('{pts} von {max}', { pts: i.pts, max: i.max }))}</span></div>
+        <div class="small">${esc(t('Deine Antwort:'))} ${esc(i.answer)}</div><div class="small">${esc(t('Richtig:'))} ${esc(i.right)}</div>${extra}</div>`;
     })
     .join('');
   const path = route
-    ? `<div class="res-item"><div class="res-head"><span>Dein Weg</span></div><ul class="route">${route
-        .map((r) => `<li><span class="mk ${r.ok ? 'ok' : 'bad'}" aria-label="${r.ok ? 'richtig' : 'falsch'}">${r.ok ? '✓' : '✗'}</span><span><b>${esc(r.label)}:</b> ${esc(r.mine)}${r.ok ? '' : `. Richtig wäre: ${esc(r.right)}`}<br><span class="small">${esc(r.why)}</span></span></li>`)
+    ? `<div class="res-item"><div class="res-head"><span>${esc(t('Dein Weg'))}</span></div><ul class="route">${route
+        .map((r) => `<li><span class="mk ${r.ok ? 'ok' : 'bad'}" aria-label="${esc(t(r.ok ? 'richtig' : 'falsch'))}">${r.ok ? '✓' : '✗'}</span><span><b>${esc(r.label)}:</b> ${esc(r.mine)}${r.ok ? '' : `. ${esc(t('Richtig wäre:'))} ${esc(r.right)}`}<br><span class="small">${esc(r.why)}</span></span></li>`)
         .join('')}</ul></div>`
     : '';
-  $('result').innerHTML = `<div class="score">${g.pct} %</div><div class="small">${esc(state.sc.title)}</div>${path}${rows}
-    <div class="res-item"><div class="res-head"><span>Lösung im Zusammenhang</span></div><ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul></div>`;
+  $('result').innerHTML = `<div class="score">${g.pct} %</div><div class="small">${esc(ttl(state.sc))}</div>${path}${rows}
+    <div class="res-item"><div class="res-head"><span>${esc(t('Lösung im Zusammenhang'))}</span></div><ul class="sol">${li(sols(state.sc))}</ul></div>`;
   if (read.mode === 'wz') $('modeWz').classList.add('hidden');
   afterGrade(g.pct);
 }
@@ -488,10 +511,10 @@ function quizQuestion() {
     dist.push(...rest.slice(0, 3 - dist.length));
   }
   const options = [state.sc, ...dist].sort(() => Math.random() - 0.5);
-  $('opts').innerHTML = options.map((s) => `<button data-id="${s.id}">${esc(s.title)}</button>`).join('');
+  $('opts').innerHTML = options.map((s) => `<button data-id="${s.id}">${esc(ttl(s))}</button>`).join('');
   $('quizFb').classList.add('hidden');
   $('btnQNext').classList.add('hidden');
-  $('quizHint').textContent = state.quiz.blitz ? `Blitz: Frage ${state.quiz.n + 1} von 10` : '';
+  $('quizHint').textContent = state.quiz.blitz ? t('Blitz: Frage {n} von 10', { n: state.quiz.n + 1 }) : '';
 }
 
 function quizAnswer(id) {
@@ -506,11 +529,11 @@ function quizAnswer(id) {
   record(state.sc.id, right ? 100 : 0, 'quiz');
   state.quiz.n += 1;
   if (right) state.quiz.right += 1;
-  $('quizFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${right ? 'Richtig.' : 'Nicht ganz.'}</strong> ${esc(state.sc.title)}<ul class="sol">${state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>`;
+  $('quizFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${esc(t(right ? 'Richtig.' : 'Nicht ganz.'))}</strong> ${esc(ttl(state.sc))}<ul class="sol">${li(sols(state.sc))}</ul>`;
   $('quizFb').classList.remove('hidden');
   if (state.quiz.blitz && state.quiz.n >= 10) {
     const sec = Math.round((Date.now() - state.quiz.t0) / 1000);
-    $('quizHint').textContent = `Blitz beendet: ${state.quiz.right} von 10 richtig in ${sec} s.`;
+    $('quizHint').textContent = t('Blitz beendet: {r} von 10 richtig in {s} s.', { r: state.quiz.right, s: sec });
     state.quiz.blitz = false;
     state.quiz.n = 0;
     state.quiz.right = 0;
@@ -534,7 +557,7 @@ function errorCase() {
   state.sig = sig;
   tools.pts = [];
   redrawPaper();
-  $('errOpts').innerHTML = ERRORS.map((e) => `<button data-id="${e[0]}">${esc(e[1])}</button>`).join('');
+  $('errOpts').innerHTML = ERRORS.map((e) => `<button data-id="${e[0]}">${esc(t(e[1]))}</button>`).join('');
   $('errFb').classList.add('hidden');
   $('btnErrNext').classList.add('hidden');
 }
@@ -548,7 +571,7 @@ function errorAnswer(id) {
   }
   record('fehler-' + err.cur[0], right ? 100 : 0, 'fehler');
   setExplainAvail(false);
-  $('errFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${right ? 'Richtig.' : 'Nicht ganz.'}</strong> ${esc(err.cur[1])}<div class="small">${esc(err.cur[2])}</div>`;
+  $('errFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${esc(t(right ? 'Richtig.' : 'Nicht ganz.'))}</strong> ${esc(t(err.cur[1]))}<div class="small">${esc(t(err.cur[2]))}</div>`;
   $('errFb').classList.remove('hidden');
   $('btnErrNext').classList.remove('hidden');
   renderStats();
@@ -558,12 +581,11 @@ function errorAnswer(id) {
 const live = { running: false, total: 0, story: null, answers: [] };
 const MON_RHYTHMS = [...RHYTHMS, ['pvc', 'Sinusrhythmus mit Extrasystolen']];
 const monTruth = (id) => (TRUTH[id].findings.includes('pvc') ? 'pvc' : TRUTH[id].rhythm);
-const monLabel = (r) => MON_RHYTHMS.find((x) => x[0] === r)[1];
+const monLabel = (r) => t(MON_RHYTHMS.find((x) => x[0] === r)[1]);
 
 function liveSetup() {
-  $('liveStory').innerHTML = LIVE.map((l, i) => `<option value="${i}">${esc(l.title)}</option>`).join('');
-  $('liveAns').innerHTML = MON_RHYTHMS.map((r) => `<option value="${r[0]}">${esc(r[1])}</option>`).join('');
-  $('liveStory').querySelectorAll('option').forEach((o) => (o.textContent = 'Szenario ' + (Number(o.value) + 1)));
+  $('liveStory').innerHTML = LIVE.map((l, i) => `<option value="${i}">${esc(t('Szenario {n}', { n: i + 1 }))}</option>`).join('');
+  $('liveAns').innerHTML = MON_RHYTHMS.map((r) => `<option value="${r[0]}">${esc(t(r[1]))}</option>`).join('');
   live.running = false;
   $('liveRes').classList.add('hidden');
   $('liveCtl').classList.add('hidden');
@@ -586,7 +608,7 @@ function startLive() {
   live.running = true;
   $('liveRes').classList.add('hidden');
   $('liveCtl').classList.remove('hidden');
-  $('liveLog').textContent = 'Läuft. Beim Rhythmuswechsel sofort ansagen.';
+  $('liveLog').textContent = t('Läuft. Beim Rhythmuswechsel sofort ansagen.');
   setMode('monitor');
   startMonitor();
 }
@@ -594,7 +616,7 @@ function startLive() {
 function liveAnswer() {
   if (!live.running) return;
   live.answers.push({ t: monClock, r: $('liveAns').value });
-  $('liveLog').textContent = `Angesagt: ${monLabel($('liveAns').value)}`;
+  $('liveLog').textContent = t('Angesagt: {r}', { r: monLabel($('liveAns').value) });
 }
 
 function finishLive() {
@@ -613,20 +635,20 @@ function finishLive() {
       const prevCovered = live.answers.some((a) => a.r === truth && a.t >= a0 - 3 && a.t < a0);
       if (okA || prevCovered) hits += 1;
       record(id, okA ? 100 : 0, 'live');
-      const t = okA ? `erkannt nach ${Math.max(0, okA.t - a0).toFixed(1).replace('.', ',')} s` : 'nicht erkannt';
-      return `<div class="res-item"><div class="res-head"><span>Abschnitt ${i + 1}: ${esc(monLabel(truth))}</span><span class="${okA ? 'ok' : 'bad'}">${t}</span></div>${wrong ? `<div class="small">${wrong} falsche Ansage(n) in diesem Abschnitt</div>` : ''}</div>`;
+      const when = okA ? t('erkannt nach {s} s', { s: dec(Math.max(0, okA.t - a0).toFixed(1)) }) : t('nicht erkannt');
+      return `<div class="res-item"><div class="res-head"><span>${esc(t('Abschnitt {n}: {r}', { n: i + 1, r: monLabel(truth) }))}</span><span class="${okA ? 'ok' : 'bad'}">${esc(when)}</span></div>${wrong ? `<div class="small">${esc(t('{n} falsche Ansage(n) in diesem Abschnitt', { n: wrong }))}</div>` : ''}</div>`;
     })
     .join('');
-  $('liveRes').innerHTML = `<div class="score">${hits} von ${live.story.segs.length}</div><div class="small">${esc(live.story.title)}</div>${rows}`;
+  $('liveRes').innerHTML = `<div class="score">${esc(t('{a} von {b}', { a: hits, b: live.story.segs.length }))}</div><div class="small">${esc(t(live.story.title))}</div>${rows}`;
   $('liveRes').classList.remove('hidden');
   renderStats();
 }
 
 function showContext() {
   const on = $('chkCtx').checked && (state.tab === 'read' || state.tab === 'quiz');
-  const t = CONTEXT[state.sc.id];
-  if (on && t) {
-    $('ctxBox').innerHTML = `<div class="panel-head" style="margin-bottom:6px"><h2>Fallgeschichte</h2></div><div>${esc(t)}</div>`;
+  const ctx = CONTEXT[state.sc.id];
+  if (on && ctx) {
+    $('ctxBox').innerHTML = `<span class="k">${esc(t('Fallvignette'))}</span><span class="v">${esc(t(ctx))}</span>`;
     $('ctxBox').classList.remove('hidden');
   } else $('ctxBox').classList.add('hidden');
 }
@@ -636,14 +658,16 @@ function runCatalog() {
   build();
   const m = measure(state.sig);
   const normal = state.sc.id === 'sinus';
-  $('kv').innerHTML = `<span>Frequenz <b>${m.hr ?? '-'}</b>/min</span>${m.hr === null ? '' : `<span>QRS-Breite <b>${m.qrsMs}</b> ms</span>`}<span>Lagetyp (QRS-Achse) <b>${normal ? fmt(m.axis, ...NORMAL_RANGES.axis) : m.axis}</b>&deg;</span>`;
-  let rows = '<tr><th>Ableitung</th><th>R (mm)</th><th>S (mm)</th><th>ST +60 ms (mm)</th><th>T (mm)</th></tr>';
+  $('kv').innerHTML = `<span>${esc(t('Frequenz'))} <b>${m.hr ?? '-'}</b>/min</span>${m.hr === null ? '' : `<span>${esc(t('QRS-Breite'))} <b>${m.qrsMs}</b> ms</span>`}<span>${esc(t('Lagetyp (QRS-Achse)'))} <b>${normal ? fmt(m.axis, ...NORMAL_RANGES.axis) : m.axis}</b>&deg;</span>`;
+  let rows = `<tr><th>${esc(t('Ableitung'))}</th><th>R (mm)</th><th>S (mm)</th><th>ST +60 ms (mm)</th><th>T (mm)</th></tr>`;
   for (const l of m.perLead) rows += `<tr><td>${l.name}</td><td>${mm(l.r)}</td><td>${mm(l.s)}</td><td>${mm(l.st)}</td><td>${mm(l.t)}</td></tr>`;
   $('tbl').innerHTML = rows;
-  $('rangeNote').textContent = normal
-    ? 'Farbig: Lagetyp gegen den Erwachsenen-Normbereich von -30 bis 90 Grad. Das ist eine Plausibilitätsprüfung, kein Beweis, dass ein Bild echt aussieht.'
-    : 'Werte stammen aus dem simulierten Signal ohne Störungen. Für pathologische Fälle gibt es keine allgemeinen Normbereiche, hier zählt der Vergleich mit dem erwarteten Befundmuster.';
-  $('sol').innerHTML = state.sc.solution.map((t) => `<li>${esc(t)}</li>`).join('');
+  $('rangeNote').textContent = t(
+    normal
+      ? 'Farbig: Lagetyp gegen den Erwachsenen-Normbereich von -30 bis 90 Grad. Das ist eine Plausibilitätsprüfung, kein Beweis, dass ein Bild echt aussieht.'
+      : 'Werte stammen aus dem simulierten Signal ohne Störungen. Für pathologische Fälle gibt es keine allgemeinen Normbereiche, hier zählt der Vergleich mit dem erwarteten Befundmuster.',
+  );
+  $('sol').innerHTML = li(sols(state.sc));
 }
 
 // ---------- Monitor ----------
@@ -669,14 +693,14 @@ function startMonitor() {
   const showHr = state.tab === 'cat';
 
   function frame(now) {
-    const t = (now - monT0) / 1000;
-    monClock = t;
-    if (state.tab === 'live' && live.running && t >= live.total) {
+    const tm = (now - monT0) / 1000;
+    monClock = tm;
+    if (state.tab === 'live' && live.running && tm >= live.total) {
       finishLive();
       return;
     }
-    const cyc = Math.floor(t / sweep);
-    const phase = (t % sweep) / sweep;
+    const cyc = Math.floor(tm / sweep);
+    const phase = (tm % sweep) / sweep;
     const headX = Math.floor(phase * W);
     ctx.fillStyle = '#05080a';
     ctx.fillRect(0, 0, W, H);
@@ -701,13 +725,13 @@ function startMonitor() {
     }
     ctx.stroke();
     ctx.fillStyle = '#4dff88';
-    ctx.font = '600 20px IBM Plex Sans, Arial, sans-serif';
+    ctx.font = '600 20px Hanken Grotesk, Arial, sans-serif';
     ctx.fillText('II', 24, 36);
     if (showHr) {
-      ctx.font = '700 56px IBM Plex Sans, Arial, sans-serif';
+      ctx.font = '700 56px Hanken Grotesk, Arial, sans-serif';
       ctx.fillText(String(m.hr ?? '--'), W - 170, 74);
-      ctx.font = '16px IBM Plex Sans, Arial, sans-serif';
-      ctx.fillText('HF /min', W - 168, 98);
+      ctx.font = '16px Hanken Grotesk, Arial, sans-serif';
+      ctx.fillText(t('HF /min'), W - 168, 98);
     }
     raf = requestAnimationFrame(frame);
   }
@@ -728,12 +752,22 @@ function setMode(mode) {
 // ---------- tabs and stats ----------
 function renderStats() {
   const s = stats();
-  $('statline').innerHTML = `<span class="chip"><b>${s.done}</b> bearbeitet</span><span class="chip">Schnitt <b>${s.done ? s.avg + ' %' : '-'}</b></span><span class="chip"><b>${s.due}</b> fällig</span>`;
+  $('statline').innerHTML = s.done
+    ? `<div>${esc(t('bearbeitet'))}: <b>${s.done}</b></div><div>${esc(t('Schnitt'))}: <b>${s.avg} %</b></div><div>${esc(t('fällig'))}: <b>${s.due}</b></div>`
+    : `<div>${esc(t('Noch kein Fall bearbeitet'))}</div>`;
 }
 
-const GROUP = { read: 'befund', quiz: 'quiz', live: 'live', fehler: 'fehler', cat: 'labor' };
-const GROUP_DEFAULT = { befund: 'read', quiz: 'quiz', live: 'live', fehler: 'fehler', labor: 'cat' };
 const PANELS = { read: 'panelRead', quiz: 'panelQuiz', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
+const TITLES = { read: 'Befunden', quiz: 'Quiz', live: 'Monitor live', fehler: 'Fehlerquellen', cat: 'Katalog und Realismus' };
+
+function updateHead() {
+  const tab = state.tab;
+  $('pageTitle').textContent = t(TITLES[tab]);
+  const trainer = tab === 'read' || tab === 'quiz';
+  const c = catIdx();
+  $('pageMeta').textContent = trainer ? `${levelName(level())} · ${c === null ? t('alle Kategorien') : t(CATEGORIES[c])}` : '';
+  for (const b of $('levels').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.level === level()));
+}
 
 function setTab(tab) {
   const prev = state.tab;
@@ -742,23 +776,22 @@ function setTab(tab) {
     live.running = false;
     setMode('paper');
   }
-  const group = GROUP[tab];
   for (const b of $('nav').querySelectorAll('button')) {
-    if (b.dataset.group === group) b.setAttribute('aria-current', 'page');
+    if (b.dataset.tab === tab) b.setAttribute('aria-current', 'page');
     else b.removeAttribute('aria-current');
   }
-  $('subLabor').classList.toggle('hidden', group !== 'labor');
-  $('tabCat').setAttribute('aria-pressed', String(tab === 'cat'));
-  for (const [t, id] of Object.entries(PANELS)) $(id).classList.toggle('hidden', t !== tab);
+  for (const [k, id] of Object.entries(PANELS)) $(id).classList.toggle('hidden', k !== tab);
   if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
   const trainer = tab === 'read' || tab === 'quiz';
   $('work').classList.toggle('single', tab === 'cat');
   $('wLevel').classList.toggle('hidden', !trainer);
   $('wCat').classList.toggle('hidden', !trainer);
   $('wCtx').classList.toggle('hidden', !trainer);
+  $('btnNew').classList.toggle('hidden', !(trainer || tab === 'fehler'));
   const noMode = tab === 'fehler';
   $('modeWrap').classList.toggle('hidden', noMode || tab === 'live');
   if (noMode) setMode('paper');
+  updateHead();
   if (tab === 'read') readCase();
   else if (tab === 'quiz') quizQuestion();
   else if (tab === 'fehler') errorCase();
@@ -775,11 +808,36 @@ function setTab(tab) {
 // ---------- events ----------
 $('nav').addEventListener('click', (e) => {
   const b = e.target.closest('button');
-  if (!b) return;
-  const g = b.dataset.group;
-  setTab(GROUP_DEFAULT[g]);
+  if (b) setTab(b.dataset.tab);
 });
-$('tabCat').addEventListener('click', () => setTab('cat'));
+$('levels').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b || b.dataset.level === state.level) return;
+  state.level = b.dataset.level;
+  try {
+    localStorage.setItem('ekg-level', state.level);
+  } catch (err) {
+    /* ignore */
+  }
+  read.alt = false;
+  setTab(state.tab);
+});
+$('btnNew').addEventListener('click', () => {
+  if (state.tab === 'read') readCase();
+  else if (state.tab === 'quiz') quizQuestion();
+  else if (state.tab === 'fehler') errorCase();
+});
+for (const b of document.querySelectorAll('[data-lang-btn]')) b.addEventListener('click', () => setLang(b.dataset.langBtn));
+onLang(() => {
+  fillStatic();
+  renderStats();
+  setTab(state.tab);
+  $('solToggle').textContent = t($('solToggle').getAttribute('aria-pressed') === 'true' ? 'Lösung verbergen' : 'Lösung zeigen');
+});
+document.addEventListener('click', (e) => {
+  const d = $('wMore');
+  if (d.open && !d.contains(e.target)) d.open = false;
+});
 $('vCode').addEventListener('change', (e) => setCode(e.target.value));
 $('btnLiveStart').addEventListener('click', startLive);
 $('btnLiveAns').addEventListener('click', liveAnswer);
@@ -866,10 +924,6 @@ $('btnBlitz').addEventListener('click', () => {
   $('btnBlitz').setAttribute('aria-pressed', 'true');
   quizQuestion();
 });
-$('level').addEventListener('change', () => {
-  read.alt = false;
-  setTab(state.tab);
-});
 $('cat').addEventListener('change', () => setTab(state.tab));
 function refresh() {
   if (state.tab === 'fehler') redrawPaper();
@@ -896,7 +950,7 @@ $('modeMonitor').addEventListener('click', () => setMode('monitor'));
 $('solToggle').addEventListener('click', () => {
   const on = $('solToggle').getAttribute('aria-pressed') !== 'true';
   $('solToggle').setAttribute('aria-pressed', String(on));
-  $('solToggle').textContent = on ? 'Lösung verbergen' : 'Lösung zeigen';
+  $('solToggle').textContent = t(on ? 'Lösung verbergen' : 'Lösung zeigen');
   $('sol').classList.toggle('hidden', !on);
   $('solHidden').classList.toggle('hidden', on);
 });
@@ -907,7 +961,6 @@ $('btnExport').addEventListener('click', () => {
     box.id = 'exportBox';
     box.readOnly = true;
     box.rows = 6;
-    box.style.cssText = 'width:100%;margin-top:8px;font:12px var(--mono);background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px';
     $('btnExport').parentElement.appendChild(box);
   }
   box.value = exportJson();
@@ -928,5 +981,6 @@ try {
 } catch (e) {
   /* ignore */
 }
+applyDom();
 renderStats();
 setTab('read');

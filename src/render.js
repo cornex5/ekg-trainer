@@ -1,4 +1,5 @@
 import { LEAD_NAMES } from './leads.js';
+import { t } from './i18n.js';
 
 const GRID_BG = '#fdf4f1';
 const GRID_MINOR = '#f3c4c0';
@@ -88,7 +89,7 @@ export function paperSvg(sig, o = {}) {
   }
   lines.push(`<path d="${trace.join('')}" stroke="#141414" stroke-width="0.34" fill="none" stroke-linejoin="round" stroke-linecap="round"/>`);
   lines.push(...labels);
-  const head = o.header ?? `${mmPerSec} mm/s   ${mmPerMv} mm/mV   0,5 bis 150 Hz`;
+  const head = o.header ?? `${mmPerSec} mm/s   ${mmPerMv} mm/mV   ${t('0,5 bis 150 Hz')}`;
   lines.push(`<text x="${marginL}" y="9" font-size="3.4" font-family="Arial, Helvetica, sans-serif" fill="#3a3a3a">${head}</text>`);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width * 4}" height="${height * 4}">${lines.join('')}</svg>`;

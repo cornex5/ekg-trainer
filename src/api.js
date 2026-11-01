@@ -1,4 +1,5 @@
 // Calls to the server function that evaluates free-text findings with Claude.
+import { t } from './i18n.js';
 const CODE_KEY = 'ekg-code';
 
 export function getCode() {
@@ -26,6 +27,14 @@ export async function apiStatus() {
   }
 }
 
+// Server messages are German; known ones are translated here.
+function serverMessage(m) {
+  if (!m) return '';
+  const pre = 'Bewertung fehlgeschlagen: ';
+  if (m.startsWith(pre)) return t('Bewertung fehlgeschlagen: {msg}', { msg: m.slice(pre.length) });
+  return t(m);
+}
+
 export async function evaluate(payload) {
   const h = { 'Content-Type': 'application/json' };
   const c = getCode();
@@ -34,7 +43,7 @@ export async function evaluate(payload) {
   try {
     r = await fetch('/api/evaluate', { method: 'POST', headers: h, body: JSON.stringify(payload) });
   } catch (e) {
-    const err = new Error('Der Server ist nicht erreichbar. Prüfe Deine Verbindung.');
+    const err = new Error(t('Der Server ist nicht erreichbar. Prüfe Deine Verbindung.'));
     err.kind = 'network';
     throw err;
   }
@@ -45,7 +54,7 @@ export async function evaluate(payload) {
     /* not json */
   }
   if (!r.ok) {
-    const err = new Error(j.message || `Serverfehler ${r.status}`);
+    const err = new Error(serverMessage(j.message) || t('Serverfehler {n}', { n: r.status }));
     err.kind = j.error || 'http';
     throw err;
   }

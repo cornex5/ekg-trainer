@@ -23,9 +23,14 @@ Regeln:
 - Zähle sinnvolle Synonyme als richtig (zum Beispiel Rechtsherzbelastung statt Lungenembolie-Muster, wenn die Begründung passt).
 - Behauptungen, die nicht zu den Falldaten passen (erfundene Befunde, falscher Rhythmus), gehen in "erfunden" und kosten Punkte. Nicht erwähnte, aber vorhandene Befunde sind "fehlt".
 - Nur das, was gesagt wurde, kann Punkte bringen. Beim Niveau passend streng oder milde sein, siehe Niveauvorgabe.
-- Schreibe sachlich, direkt, auf Deutsch, in der Du-Form. Kein Lob ohne Anlass, keine Floskeln.
+- Schreibe sachlich, direkt, in der Sprache der Sprachvorgabe am Ende der Nutzernachricht (Deutsch in der Du-Form, Englisch in der zweiten Person). Kein Lob ohne Anlass, keine Floskeln.
 - "musterbefund": ein vollständiger Befund, so wie ihn eine gute Person auf diesem Niveau aufschreiben würde, in 3 bis 8 Sätzen, nur mit Informationen aus den Falldaten.
 - Verwende in "items" nur Aspekte, die auf diesem Niveau erwartet werden, jeweils mit "gesagt" (wörtlich oder knapp zusammengefasst, "nichts dazu geschrieben" falls leer), "erwartet" und einem kurzen "kommentar" mit Begründung, warum es so ist.`;
+
+const LANG_NOTE = {
+  de: 'Sprachvorgabe: Antworte vollständig auf Deutsch. Der Befundtext kann auch englische Fachbegriffe enthalten, die wie ihre deutschen Entsprechungen zählen.',
+  en: 'Language: write every text field (zusammenfassung, aspekt, gesagt, erwartet, kommentar, erfunden, musterbefund) in English, addressing the user as "you". The case data is German, translate it into standard English medical terminology. The finding text may be in English or German; English terms and abbreviations (for example AFib, LBBB, RBBB, PVC, STEMI, axis, PR interval) count like their German equivalents. Level names: Rettungssanitäter = EMT, Notfallsanitäter = Paramedic, Arzt = Physician, Kardiologie und Experte = Expert. Keep the enum values of "urteil" exactly as defined (German words).',
+};
 
 const TOOL = {
   name: 'bewertung',
@@ -75,7 +80,7 @@ export default async function handler(req, res) {
     return send(res, 400, { error: 'bad_request', message: 'Ungültige Anfrage.' });
   }
 
-  const user = `${LEVEL_RULES[body.level]}\n\nFalldaten (Wahrheit aus der Simulation):\n${fall}\n\nBefundtext des Nutzers:\n"""\n${transcript}\n"""`;
+  const user = `${LEVEL_RULES[body.level]}\n\nFalldaten (Wahrheit aus der Simulation):\n${fall}\n\nBefundtext des Nutzers:\n"""\n${transcript}\n"""\n\n${LANG_NOTE[body.lang === 'en' ? 'en' : 'de']}`;
   try {
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
