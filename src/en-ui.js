@@ -66,6 +66,7 @@ export const EN_UI = {
   'Messzirkel: <b>{ms} ms</b> ({dx} mm waagerecht, entspricht {bpm}/min als Abstand), <b>{mv} mV</b> ({dy} mm senkrecht).': 'Caliper: <b>{ms} ms</b> ({dx} mm horizontal, equals {bpm}/min as an interval), <b>{mv} mV</b> ({dy} mm vertical).',
   'Zweiten Punkt anklicken.': 'Click the second point.',
   '0,5 bis 150 Hz': '0.5 to 150 Hz',
+  'Frequenz = {n} geteilt durch große Kästchen': 'Rate = {n} divided by large boxes',
 
   // reading
   'Rhythmus': 'Rhythm',

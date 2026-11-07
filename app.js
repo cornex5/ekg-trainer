@@ -117,7 +117,7 @@ function marksFor(sig) {
 function updateStageInfo() {
   const mon = state.mode === 'monitor';
   $('btnZoom').disabled = mon;
-  $('stageInfo').textContent = mon ? `${t('Monitor, Ableitung II')} · ${$('gain').value} mm/mV` : `${t('12 Ableitungen')} · ${$('speed').value} mm/s · ${$('gain').value} mm/mV`;
+  $('stageInfo').textContent = mon ? `${t('Monitor, Ableitung II')} · ${$('gain').value} mm/mV` : `${t('12 Ableitungen')} · ${$('speed').value} mm/s · ${$('gain').value} mm/mV · ${t('Frequenz = {n} geteilt durch große Kästchen', { n: Number($('speed').value) * 12 })}`;
 }
 
 function redrawPaper() {
