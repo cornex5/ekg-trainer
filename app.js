@@ -10,7 +10,8 @@ import { grade, truthSummary, caseFacts } from './src/grade.js';
 import { ERRORS, applyError, NOISE_FOR } from './src/errors.js';
 import { record, stats, pick, exportJson, reset } from './src/store.js';
 import { apiStatus, evaluate, getCode, setCode } from './src/api.js';
-import { stepsFor, derive, answersToForm, labelOf, review } from './src/wizard.js';
+import { stepsFor, derive, answersToForm, labelOf, review, hintParams, checkStep } from './src/wizard.js';
+import { hintText, wrongChoiceText, learnScore, FEHLER_CHECK } from './src/learn.js';
 import { createZoom } from './src/zoom.js';
 import { t, getLang, setLang, onLang, applyDom, dec } from './src/i18n.js';
 
@@ -36,6 +37,16 @@ const state = {
   graded: false,
   quiz: { blitz: false, n: 0, right: 0, t0: 0, answered: false },
 };
+
+function loadLearn() {
+  try {
+    return localStorage.getItem('ekg-learn') === '1';
+  } catch (e) {
+    return false;
+  }
+}
+const learn = { on: loadLearn(), hints: 0, mistakes: 0 };
+const learnOn = () => learn.on && !state.quiz.blitz;
 
 // ---------- helpers ----------
 const level = () => state.level;
@@ -331,6 +342,7 @@ function readCase() {
   newCase();
   resetRead();
   showContext();
+  resetLearn();
   if ($('work').getBoundingClientRect().top < 0) $('work').scrollIntoView({ block: 'start' });
 }
 
@@ -342,6 +354,11 @@ function renderWz() {
   $('wzBack').disabled = w.i === 0;
   const done = steps.slice(0, w.i).map((s) => (s.id === 'rate' ? t('{n}/min', { n: w.a.rate }) : labelOf(s.id, w.a[s.id])));
   $('wzSum').innerHTML = done.map((x) => `<span>${esc(x)}</span>`).join('');
+  if (w.fb) {
+    $('wzBack').disabled = false;
+    $('wzBody').innerHTML = `<div class="fbstep ${w.fb.ok ? 'ok' : 'bad'}"><strong>${esc(t(w.fb.ok ? 'Richtig.' : 'Nicht ganz.'))}</strong> ${esc(w.fb.text)}</div><div class="actions"><button class="primary" data-fbnext="1">${esc(t('Weiter'))}</button></div>`;
+    return;
+  }
   if (w.i >= steps.length) {
     const sug = derive(w.a);
     $('wzBody').innerHTML = `<p class="wq">${esc(t('Dein Befund'))}</p><p class="wh">${esc(t('Aus Deinen Antworten ergibt sich dieser Rhythmus. Du kannst ihn ändern, bevor Du auswertest.'))}</p>
@@ -350,7 +367,7 @@ function renderWz() {
     return;
   }
   const s = steps[w.i];
-  let body = `<p class="wq">${esc(t(s.q))}</p><p class="wh">${esc(s.hint ? t(s.hint) : '')}</p>`;
+  let body = `<p class="wq">${esc(t(s.q))}</p><p class="wh">${esc(s.hint ? t(s.hint, hintParams(Number($('speed').value))) : '')}</p>`;
   if (s.type === 'number') {
     body += `<div class="numrow"><input type="number" id="wzRate" min="10" max="400" inputmode="numeric" value="${esc(w.a.rate ?? '')}" aria-label="${esc(t('Frequenz pro Minute'))}"><span class="small">${esc(t('pro Minute'))}</span><button class="primary" data-rate="1">${esc(t('Weiter'))}</button></div><div class="small" id="wzErr" style="margin-top:6px"></div>`;
   } else {
@@ -364,6 +381,21 @@ function wzAnswer(v) {
   const w = read.wz;
   const s = stepsFor(w.a)[w.i];
   w.a[s.id] = v;
+  if (learnOn()) {
+    const facts = caseFacts(state.sig, state.sc);
+    if (s.id === 'rate' && facts.rate === null) {
+      w.fb = { ok: false, text: t('In diesem EKG gibt es keine einzelnen QRS-Komplexe, eine Frequenz ist nicht messbar.') };
+    } else if (s.id === 'rate') {
+      const ok = Math.abs(Number(v) - facts.rate) <= Math.max(5, 0.1 * facts.rate);
+      const speed = Number($('speed').value);
+      w.fb = { ok, text: ok ? t('Passt. Gemessen sind etwa {n}/min.', { n: facts.rate }) : t('Gemessen sind etwa {n}/min. Rechne bei {s} mm/s: {k} geteilt durch die Zahl großer Kästchen zwischen zwei R-Zacken.', { n: facts.rate, s: speed, k: speed * 12 }) };
+    } else {
+      const c = checkStep(s.id, v, facts);
+      w.fb = { ok: c.ok, text: c.ok ? c.why : `${t('Richtig wäre:')} ${c.right}. ${c.why}` };
+    }
+    renderWz();
+    return;
+  }
   w.i += 1;
   renderWz();
 }
@@ -463,7 +495,12 @@ function freeResultHtml(b, pct) {
 function afterGrade(pct) {
   state.graded = true;
   setExplainAvail(true);
-  record(state.sc.id, pct, 'read');
+  const used = learnOn() ? learn.hints : 0;
+  record(state.sc.id, used ? Math.round(pct * (1 - 0.15 * used)) : pct, 'read');
+  if (learnOn()) {
+    closeLearnRound('read');
+    if (!tools.explain) toggleExplain();
+  }
   $('result').classList.remove('hidden');
   $('btnNext').classList.remove('hidden');
   renderStats();
@@ -492,6 +529,55 @@ function finishRead(g, route) {
   afterGrade(g.pct);
 }
 
+// ---------- Learn mode ----------
+const HINT_IDS = { read: 'hintRead', quiz: 'hintQuiz', fehler: 'hintFehler' };
+const roundOpen = (kind) => (kind === 'read' ? !state.graded : kind === 'quiz' ? !state.quiz.answered : !err.answered);
+
+function resetLearn() {
+  learn.hints = 0;
+  learn.mistakes = 0;
+  for (const [kind, id] of Object.entries(HINT_IDS)) {
+    const bar = $(id);
+    bar.classList.toggle('hidden', !(learnOn() && state.tab === kind && roundOpen(kind)));
+    const box = bar.querySelector('.hintbox');
+    box.classList.add('hidden');
+    box.innerHTML = '';
+    bar.querySelector('button').disabled = false;
+  }
+}
+function closeLearnRound(kind) {
+  $(HINT_IDS[kind]).classList.add('hidden');
+}
+// Cross out wrong options, but always leave the right one and at least one wrong one.
+function eliminate(container, rightId, count) {
+  const wrong = [...container.querySelectorAll('button:not(:disabled)')].filter((b) => b.dataset.id !== rightId);
+  const k = Math.min(count, wrong.length - 1);
+  wrong.sort(() => Math.random() - 0.5).slice(0, Math.max(0, k)).forEach((b) => {
+    b.disabled = true;
+    b.classList.add('gone');
+  });
+}
+function showHint(kind) {
+  const max = kind === 'fehler' ? 2 : 3;
+  if (learn.hints >= max || !learnOn()) return;
+  learn.hints += 1;
+  const n = learn.hints;
+  const bar = $(HINT_IDS[kind]);
+  let text;
+  if (kind === 'fehler') text = n === 1 ? t(FEHLER_CHECK) : t('Die Hälfte der falschen Antworten ist jetzt ausgeblendet.');
+  else text = hintText(n, kind, state.sig, state.sc, level());
+  const box = bar.querySelector('.hintbox');
+  box.classList.remove('hidden');
+  box.insertAdjacentHTML('beforeend', `<p>${esc(text)}</p>`);
+  if (kind === 'quiz' && n === 3) eliminate($('opts'), state.sc.id, 2);
+  if (kind === 'fehler' && n === 2) eliminate($('errOpts'), err.cur[0], Math.floor(ERRORS.length / 2));
+  if (n >= max) bar.querySelector('button').disabled = true;
+}
+function showWrongFeedback(box, html) {
+  box.innerHTML = html;
+  box.classList.remove('hidden');
+}
+
 // ---------- Quiz ----------
 function quizQuestion() {
   newCase();
@@ -515,18 +601,33 @@ function quizQuestion() {
   $('quizFb').classList.add('hidden');
   $('btnQNext').classList.add('hidden');
   $('quizHint').textContent = state.quiz.blitz ? t('Blitz: Frage {n} von 10', { n: state.quiz.n + 1 }) : '';
+  resetLearn();
 }
 
 function quizAnswer(id) {
   if (state.quiz.answered) return;
+  const right = id === state.sc.id;
+  const help = learnOn();
+  if (help && !right) {
+    learn.mistakes += 1;
+    const b = $('opts').querySelector(`button[data-id="${id}"]`);
+    b.classList.add('wrong');
+    b.disabled = true;
+    const opt = SCENARIOS.find((s) => s.id === id);
+    showWrongFeedback($('quizFb'), `<strong class="bad">${esc(t('Nicht ganz.'))}</strong> ${esc(wrongChoiceText(opt, state.sig, state.sc, level()))}<div class="small">${esc(t('Versuche es noch einmal.'))}</div>`);
+    return;
+  }
   state.quiz.answered = true;
   setExplainAvail(true);
-  const right = id === state.sc.id;
   for (const b of $('opts').querySelectorAll('button')) {
     if (b.dataset.id === state.sc.id) b.classList.add('right');
     else if (b.dataset.id === id) b.classList.add('wrong');
   }
-  record(state.sc.id, right ? 100 : 0, 'quiz');
+  record(state.sc.id, help ? learnScore(learn.mistakes, learn.hints) : right ? 100 : 0, 'quiz');
+  if (help) {
+    closeLearnRound('quiz');
+    if (!tools.explain) toggleExplain();
+  }
   state.quiz.n += 1;
   if (right) state.quiz.right += 1;
   $('quizFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${esc(t(right ? 'Richtig.' : 'Nicht ganz.'))}</strong> ${esc(ttl(state.sc))}<ul class="sol">${li(sols(state.sc))}</ul>`;
@@ -560,16 +661,28 @@ function errorCase() {
   $('errOpts').innerHTML = ERRORS.map((e) => `<button data-id="${e[0]}">${esc(t(e[1]))}</button>`).join('');
   $('errFb').classList.add('hidden');
   $('btnErrNext').classList.add('hidden');
+  resetLearn();
 }
 function errorAnswer(id) {
   if (err.answered) return;
-  err.answered = true;
   const right = id === err.cur[0];
+  const help = learnOn();
+  if (help && !right) {
+    learn.mistakes += 1;
+    const b = $('errOpts').querySelector(`button[data-id="${id}"]`);
+    b.classList.add('wrong');
+    b.disabled = true;
+    const opt = ERRORS.find((e) => e[0] === id);
+    showWrongFeedback($('errFb'), `<strong class="bad">${esc(t('Nicht ganz.'))}</strong> ${esc(t('Das wäre: {l}', { l: t(opt[1]) }))}<div class="small">${esc(t(opt[2]))}</div><div class="small">${esc(t('Versuche es noch einmal.'))}</div>`);
+    return;
+  }
+  err.answered = true;
   for (const b of $('errOpts').querySelectorAll('button')) {
     if (b.dataset.id === err.cur[0]) b.classList.add('right');
     else if (b.dataset.id === id) b.classList.add('wrong');
   }
-  record('fehler-' + err.cur[0], right ? 100 : 0, 'fehler');
+  record('fehler-' + err.cur[0], help ? learnScore(learn.mistakes, learn.hints) : right ? 100 : 0, 'fehler');
+  if (help) closeLearnRound('fehler');
   setExplainAvail(false);
   $('errFb').innerHTML = `<strong class="${right ? 'ok' : 'bad'}">${esc(t(right ? 'Richtig.' : 'Nicht ganz.'))}</strong> ${esc(t(err.cur[1]))}<div class="small">${esc(t(err.cur[2]))}</div>`;
   $('errFb').classList.remove('hidden');
@@ -765,7 +878,7 @@ function updateHead() {
   $('pageTitle').textContent = t(TITLES[tab]);
   const trainer = tab === 'read' || tab === 'quiz';
   const c = catIdx();
-  $('pageMeta').textContent = trainer ? `${levelName(level())} · ${c === null ? t('alle Kategorien') : t(CATEGORIES[c])}` : '';
+  $('pageMeta').textContent = trainer ? `${levelName(level())} · ${c === null ? t('alle Kategorien') : t(CATEGORIES[c])}${learn.on ? ` · ${t('Lernmodus')}` : ''}` : '';
   for (const b of $('levels').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.level === level()));
 }
 
@@ -785,6 +898,7 @@ function setTab(tab) {
   const trainer = tab === 'read' || tab === 'quiz';
   $('work').classList.toggle('single', tab === 'cat');
   $('wLevel').classList.toggle('hidden', !trainer);
+  $('wLearn').classList.toggle('hidden', !(trainer || tab === 'fehler'));
   $('wCat').classList.toggle('hidden', !trainer);
   $('wCtx').classList.toggle('hidden', !trainer);
   $('btnNew').classList.toggle('hidden', !(trainer || tab === 'fehler'));
@@ -887,12 +1001,20 @@ $('wzBody').addEventListener('click', (e) => {
   if (b.dataset.v) wzAnswer(b.dataset.v);
   else if (b.dataset.rate) wzRate();
   else if (b.dataset.go) gradeWz();
+  else if (b.dataset.fbnext) {
+    read.wz.fb = null;
+    read.wz.i += 1;
+    renderWz();
+  }
 });
 $('wzBody').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && e.target.id === 'wzRate') wzRate();
 });
 $('wzBack').addEventListener('click', () => {
-  if (read.wz.i > 0) {
+  if (read.wz.fb) {
+    read.wz.fb = null;
+    renderWz();
+  } else if (read.wz.i > 0) {
     read.wz.i -= 1;
     renderWz();
   }
@@ -934,7 +1056,10 @@ $('noise').addEventListener('change', (e) => {
   state.noise = e.target.value;
   refresh();
 });
-$('speed').addEventListener('change', refresh);
+$('speed').addEventListener('change', () => {
+  refresh();
+  if (state.tab === 'read' && read.mode === 'wz' && !state.graded) renderWz();
+});
 $('gain').addEventListener('change', refresh);
 $('scenario').addEventListener('change', (e) => {
   state.sc = SCENARIOS.find((s) => s.id === e.target.value);
@@ -954,6 +1079,21 @@ $('solToggle').addEventListener('click', () => {
   $('sol').classList.toggle('hidden', !on);
   $('solHidden').classList.toggle('hidden', on);
 });
+function syncLearn() {
+  $('btnLearn').setAttribute('aria-pressed', String(learn.on));
+}
+$('btnLearn').addEventListener('click', () => {
+  learn.on = !learn.on;
+  try {
+    localStorage.setItem('ekg-learn', learn.on ? '1' : '0');
+  } catch (e) {
+    /* ignore */
+  }
+  syncLearn();
+  updateHead();
+  resetLearn();
+});
+for (const b of document.querySelectorAll('.hintbar button')) b.addEventListener('click', () => showHint(b.dataset.hint));
 $('btnExport').addEventListener('click', () => {
   let box = $('exportBox');
   if (!box) {
@@ -982,5 +1122,6 @@ try {
   /* ignore */
 }
 applyDom();
+syncLearn();
 renderStats();
 setTab('read');

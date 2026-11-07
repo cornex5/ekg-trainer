@@ -67,6 +67,23 @@ html[lang="en"] .de-only { display: none; }
 .levels button .dotl { width: 8px; height: 8px; border-radius: 50%; background: #3b566a; flex: none; }
 .levels button[aria-pressed="true"] { background: var(--side-hi); color: #fff; border-color: #7fd4cf; font-weight: 600; }
 .levels button[aria-pressed="true"] .dotl { background: #7fd4cf; }
+.learn-toggle { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: none; color: var(--side-text); border: 1.5px solid var(--side-line); border-radius: var(--rs); padding: 8px 12px; min-height: 50px; font-weight: 500; font-size: 15px; cursor: pointer; }
+.learn-toggle:hover { background: var(--side-hi); }
+.learn-toggle small { display: block; font-size: 12.5px; font-weight: 400; color: var(--side-ico); line-height: 1.25; }
+.learn-toggle .sw { flex: none; width: 30px; height: 18px; border-radius: 9px; background: #3b566a; position: relative; }
+.learn-toggle .sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
+.learn-toggle[aria-pressed="true"] { border-color: #7fd4cf; background: var(--side-hi); color: #fff; }
+.learn-toggle[aria-pressed="true"] .sw { background: #7fd4cf; }
+.learn-toggle[aria-pressed="true"] .sw::after { left: 14px; }
+.hintbar { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px; margin: 0 0 14px; }
+.hintbox { flex: 1 1 100%; background: var(--sunk); border-left: 4px solid var(--accent); border-radius: var(--rs); padding: 10px 14px; font-size: 15px; }
+.hintbox p { margin: 0 0 6px; }
+.hintbox p:last-child { margin: 0; }
+.opts button.gone { opacity: .35; text-decoration: line-through; }
+.opts button:disabled { cursor: default; }
+.fbstep { padding: 12px 14px; border-radius: var(--rs); background: var(--sunk); margin-bottom: 12px; }
+.fbstep.ok { background: var(--ok-bg); }
+.fbstep.bad { background: var(--warn-bg); }
 .levels small { display: block; font-size: 12.5px; font-weight: 400; color: var(--side-ico); line-height: 1.2; }
 .lang { display: inline-flex; border: 1.5px solid var(--side-line); border-radius: var(--rs); overflow: hidden; align-self: flex-start; }
 .lang button { background: none; border: 0; color: var(--side-text); font: 500 14px var(--mono); padding: 0 14px; min-height: 38px; cursor: pointer; }
@@ -270,6 +287,10 @@ th { color: var(--muted); font-weight: 500; }
       </div>
     </div>
 
+    <div id="wLearn" class="hidden">
+      <button id="btnLearn" class="learn-toggle" aria-pressed="false"><span class="sw" aria-hidden="true"></span><span><span data-t="Lernmodus">Lernmodus</span><small data-t="Tipps und Erklärung nach jeder Antwort">Tipps und Erklärung nach jeder Antwort</small></span></button>
+    </div>
+
     <div class="lang" role="group" data-t-attr="aria-label:Sprache">
       <button data-lang-btn="de" aria-pressed="false">DE</button>
       <button data-lang-btn="en" aria-pressed="false">EN</button>
@@ -350,6 +371,7 @@ th { color: var(--muted); font-weight: 500; }
             <h2 data-t="Befunden">Befunden</h2>
             <span class="lvl" id="readTag"></span>
           </div>
+          <div class="hintbar hidden" id="hintRead"><button class="tool" data-hint="read" data-t="Tipp">Tipp</button><div class="hintbox hidden" aria-live="polite"></div></div>
 
           <div id="modeWz" class="hidden">
             <div class="dots" id="wzDots"></div>
@@ -419,6 +441,7 @@ th { color: var(--muted); font-weight: 500; }
         <section id="panelQuiz" class="panel hidden">
           <div class="panel-head"><h2 id="quizHead" data-t="Quiz">Quiz</h2></div>
           <p class="q" data-t="Welche Diagnose passt zu diesem EKG?">Welche Diagnose passt zu diesem EKG?</p>
+          <div class="hintbar hidden" id="hintQuiz"><button class="tool" data-hint="quiz" data-t="Tipp">Tipp</button><div class="hintbox hidden" aria-live="polite"></div></div>
           <div class="opts" id="opts"></div>
           <div id="quizFb" class="fb hidden"></div>
           <div class="actions">
@@ -430,6 +453,7 @@ th { color: var(--muted); font-weight: 500; }
 
         <section id="panelFehler" class="panel hidden">
           <div class="panel-head"><h2 data-t="Was ist an dieser Ableitung falsch?">Was ist an dieser Ableitung falsch?</h2><p data-t="Technische Fehler erkennen, bevor man das EKG interpretiert.">Technische Fehler erkennen, bevor man das EKG interpretiert.</p></div>
+          <div class="hintbar hidden" id="hintFehler"><button class="tool" data-hint="fehler" data-t="Tipp">Tipp</button><div class="hintbox hidden" aria-live="polite"></div></div>
           <div class="opts" id="errOpts"></div>
           <div id="errFb" class="fb hidden"></div>
           <div class="actions">

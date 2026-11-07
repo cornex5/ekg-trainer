@@ -25,13 +25,13 @@ export const STEPS = [
     id: 'rate',
     type: 'number',
     q: 'Wie viele Herzschläge pro Minute?',
-    hint: 'Regelmäßig: 300 geteilt durch die Zahl großer Kästchen zwischen zwei R-Zacken. Unregelmäßig: Schläge in 6 Sekunden (30 große Kästchen) mal 10.',
+    hint: 'Regelmäßig: {n} geteilt durch die Zahl großer Kästchen zwischen zwei R-Zacken. Unregelmäßig: Schläge in 6 Sekunden ({box} große Kästchen) mal 10.',
     when: (a) => a.base === 'complexes',
   },
   {
     id: 'qrs',
     q: 'Sind die Komplexe schmal oder breit?',
-    hint: 'Ab drei kleinen Kästchen (120 ms) gilt ein QRS-Komplex als breit.',
+    hint: 'Ab {small} kleinen Kästchen (120 ms) gilt ein QRS-Komplex als breit.',
     opts: [
       ['narrow', 'Schmal'],
       ['wide', 'Breit'],
@@ -72,6 +72,9 @@ export const STEPS = [
     when: (a) => a.base === 'complexes',
   },
 ];
+
+// Box counts depend on the paper speed: 1 mm = 1 small box, 5 mm = 1 large box.
+export const hintParams = (speed) => ({ n: speed * 12, box: (speed * 6) / 5, small: Math.round(speed * 0.12) });
 
 export const stepsFor = (a) => STEPS.filter((s) => !s.when || s.when(a));
 
@@ -117,9 +120,8 @@ const WHY = {
 };
 
 // facts: from caseFacts(); returns one line per answered step with a verdict.
-export function review(a, facts) {
-  const rows = [];
-  const truth = {
+export function truthOf(facts) {
+  return {
     base: facts.arrest ? (facts.rhythm === 'vf' ? 'chaos' : 'flat') : 'complexes',
     regular: facts.regular ? 'regular' : 'irregular',
     qrs: facts.qrsWide ? 'wide' : 'narrow',
@@ -127,6 +129,17 @@ export function review(a, facts) {
     early: facts.findings.includes('pvc') ? 'yes' : 'no',
     st: facts.findings.includes('stemi_inf') ? 'inf' : facts.findings.includes('stemi_ant') ? 'ant' : facts.findings.includes('stemi_lat') ? 'lat' : 'none',
   };
+}
+
+// One step checked on the spot (learn mode): verdict plus the reason for the true answer.
+export function checkStep(id, value, facts) {
+  const truth = truthOf(facts)[id];
+  return { ok: value === truth, right: labelOf(id, truth), why: t(WHY[id][truth]) };
+}
+
+export function review(a, facts) {
+  const rows = [];
+  const truth = truthOf(facts);
   for (const s of stepsFor(a)) {
     if (s.id === 'rate' || a[s.id] === undefined) continue;
     const ok = a[s.id] === truth[s.id];
