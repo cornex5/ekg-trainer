@@ -12,6 +12,7 @@ import { record, stats, pick, exportJson, reset } from './src/store.js';
 import { apiStatus, evaluate, getCode, setCode } from './src/api.js';
 import { stepsFor, derive, answersToForm, labelOf, review, hintParams, checkStep } from './src/wizard.js';
 import { hintText, wrongChoiceText, learnScore, FEHLER_CHECK } from './src/learn.js';
+import { LESSONS } from './src/lessons.js';
 import { createZoom } from './src/zoom.js';
 import { t, getLang, setLang, onLang, applyDom, dec } from './src/i18n.js';
 
@@ -870,17 +871,80 @@ function renderStats() {
     : `<div>${esc(t('Noch kein Fall bearbeitet'))}</div>`;
 }
 
-const PANELS = { read: 'panelRead', quiz: 'panelQuiz', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
-const TITLES = { read: 'Befunden', quiz: 'Quiz', live: 'Monitor live', fehler: 'Fehlerquellen', cat: 'Katalog und Realismus' };
+const PANELS = { learn: 'panelLearn', read: 'panelRead', quiz: 'panelQuiz', fehler: 'panelFehler', live: 'panelLive', cat: 'panelCat' };
+const TITLES = { learn: 'Lernen', read: 'Befunden', quiz: 'Quiz', live: 'Monitor live', fehler: 'Fehlerquellen', cat: 'Katalog und Realismus' };
 
 function updateHead() {
   const tab = state.tab;
   $('pageTitle').textContent = t(TITLES[tab]);
   const trainer = tab === 'read' || tab === 'quiz';
   const c = catIdx();
-  $('pageMeta').textContent = trainer ? `${levelName(level())} · ${c === null ? t('alle Kategorien') : t(CATEGORIES[c])}${learn.on ? ` · ${t('Lernmodus')}` : ''}` : '';
+  $('pageMeta').textContent = tab === 'learn' ? levelName(level()) : trainer ? `${levelName(level())} · ${c === null ? t('alle Kategorien') : t(CATEGORIES[c])}${learn.on ? ` · ${t('Lernmodus')}` : ''}` : '';
   for (const b of $('levels').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.level === level()));
 }
+
+// ---------- Lernen ----------
+const ls = { id: LESSONS[0].id, ex: null };
+function lessonExamples(l) {
+  const max = LEVELS.indexOf(level());
+  return l.examples.map((id) => SCENARIOS.find((s) => s.id === id)).filter(Boolean).map((sc) => ({ sc, ok: LEVELS.indexOf(sc.level) <= max }));
+}
+function renderLearn() {
+  const l = LESSONS.find((x) => x.id === ls.id) || LESSONS[0];
+  $('lsList').innerHTML = LESSONS.map((x) => `<button role="tab" data-lesson="${x.id}" aria-pressed="${x.id === l.id}">${esc(t(x.title))}</button>`).join('');
+  const [key, ...rest] = l.levels[level()];
+  const trap = rest.pop();
+  const all = lessonExamples(l);
+  const exs = all.filter((e) => e.ok);
+  const shown = exs.length ? exs : all.slice(0, 1);
+  if (!shown.some((e) => e.sc.id === ls.ex)) ls.ex = shown[0] ? shown[0].sc.id : null;
+  let h = `<h3>${esc(t(l.title))}</h3><p class="key">${esc(t(key))}</p><ul>${li(rest.map((x) => t(x)))}</ul><p class="trap">${esc(t(trap))}</p>`;
+  h += `<p class="exlabel">${esc(t('Beispiel-EKGs'))}</p>`;
+  if (!exs.length) h += `<p class="small">${esc(t('Für dieses Niveau gibt es dazu keine Beispielfälle. Das gezeigte Beispiel gehört zu einem höheren Niveau.'))}</p>`;
+  h += `<div class="ex">${shown.map((e) => `<button data-ex="${e.sc.id}" aria-pressed="${e.sc.id === ls.ex}">${esc(ttl(e.sc))}</button>`).join('')}</div>`;
+  h += '<div class="exsol" id="lsSol"></div>';
+  h += `<div class="actions"><button class="primary" data-go="quiz">${esc(t('Dazu üben'))}</button><button class="tool" data-go="read">${esc(t('Als Befund'))}</button></div>`;
+  $('lsBody').innerHTML = h;
+  showLessonExample();
+}
+function showLessonExample() {
+  const sc = SCENARIOS.find((x) => x.id === ls.ex);
+  if (!sc) return;
+  state.sc = sc;
+  state.seedOffset = 0;
+  build();
+  setExplainAvail(true);
+  if (!tools.explain) toggleExplain();
+  $('lsSol').innerHTML = `<strong>${esc(t('Das zeigt das EKG'))}</strong><ul>${li(sols(sc))}</ul><p class="small" style="margin:6px 0 0">${esc(t('Farbige Markierungen: P-Welle blau, QRS rot, ST und T grün.'))}</p>`;
+}
+$('panelLearn').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.dataset.lesson) {
+    ls.id = b.dataset.lesson;
+    ls.ex = null;
+    renderLearn();
+  } else if (b.dataset.ex) {
+    ls.ex = b.dataset.ex;
+    for (const x of $('lsBody').querySelectorAll('[data-ex]')) x.setAttribute('aria-pressed', String(x.dataset.ex === ls.ex));
+    showLessonExample();
+  } else if (b.dataset.go === 'quiz') {
+    const l = LESSONS.find((x) => x.id === ls.id);
+    $('cat').value = l.cat === null ? '' : String(l.cat);
+    learn.on = true;
+    try {
+      localStorage.setItem('ekg-learn', '1');
+    } catch (err) {
+      /* ignore */
+    }
+    syncLearn();
+    setTab('quiz');
+  } else if (b.dataset.go === 'read') {
+    const l = LESSONS.find((x) => x.id === ls.id);
+    $('cat').value = l.cat === null ? '' : String(l.cat);
+    setTab('read');
+  }
+});
 
 function setTab(tab) {
   const prev = state.tab;
@@ -897,19 +961,22 @@ function setTab(tab) {
   if (tab !== 'read' && tab !== 'quiz') $('ctxBox').classList.add('hidden');
   const trainer = tab === 'read' || tab === 'quiz';
   $('work').classList.toggle('single', tab === 'cat');
-  $('wLevel').classList.toggle('hidden', !trainer);
+  $('wLevel').classList.toggle('hidden', !(trainer || tab === 'learn'));
   $('wLearn').classList.toggle('hidden', !(trainer || tab === 'fehler'));
   $('wCat').classList.toggle('hidden', !trainer);
   $('wCtx').classList.toggle('hidden', !trainer);
   $('btnNew').classList.toggle('hidden', !(trainer || tab === 'fehler'));
-  const noMode = tab === 'fehler';
+  const noMode = tab === 'fehler' || tab === 'learn';
   $('modeWrap').classList.toggle('hidden', noMode || tab === 'live');
   if (noMode) setMode('paper');
   updateHead();
   if (tab === 'read') readCase();
   else if (tab === 'quiz') quizQuestion();
   else if (tab === 'fehler') errorCase();
-  else if (tab === 'live') {
+  else if (tab === 'learn') {
+    setExplainAvail(true);
+    renderLearn();
+  } else if (tab === 'live') {
     setExplainAvail(false);
     liveSetup();
   } else {

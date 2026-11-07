@@ -1,5 +1,13 @@
 // English texts for learn mode.
 export const EN_LEARN = {
+  'Lernen': 'Learn',
+  'Kurze Lektionen zu jedem Themengebiet, passend zu Deinem Niveau, mit Beispiel-EKGs und Erklärung.': 'Short lessons on every topic, matched to your level, with example ECGs and explanations.',
+  'Beispiel-EKGs': 'Example ECGs',
+  'Für dieses Niveau gibt es dazu keine Beispielfälle. Das gezeigte Beispiel gehört zu einem höheren Niveau.': 'There are no example cases for this level. The example shown belongs to a higher level.',
+  'Das zeigt das EKG': 'What the ECG shows',
+  'Farbige Markierungen: P-Welle blau, QRS rot, ST und T grün.': 'Coloured marks: P wave blue, QRS red, ST and T green.',
+  'Dazu üben': 'Practise this',
+  'Als Befund': 'As a report',
   'Lernmodus': 'Learn mode',
   'Tipps und Erklärung nach jeder Antwort': 'Hints and explanation after every answer',
   'Tipp': 'Hint',

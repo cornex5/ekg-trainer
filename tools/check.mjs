@@ -9,6 +9,7 @@ import { ERRORS } from '../src/errors.js';
 import { LIVE } from '../src/livescen.js';
 import { STEPS } from '../src/wizard.js';
 import { EN } from '../src/en.js';
+import { LESSONS } from '../src/lessons.js';
 
 let failed = 0;
 const fail = (msg) => {
@@ -57,6 +58,17 @@ STEPS.forEach((st) => {
   if (st.hint) need.add(st.hint);
   (st.opts || []).forEach((o) => need.add(o[1]));
 });
+for (const l of LESSONS) {
+  need.add(l.title);
+  for (const lvl of ['rs', 'notsan', 'arzt', 'experte']) {
+    const v = l.levels[lvl];
+    if (!v || v.length !== 5) fail(`lesson ${l.id}/${lvl}: expected 5 texts`);
+    else v.forEach((x) => need.add(x));
+  }
+  for (const id of l.examples) if (!SCENARIOS.some((sc) => sc.id === id)) fail(`lesson ${l.id}: unknown example ${id}`);
+  if (l.cat !== null && !CATEGORIES[l.cat]) fail(`lesson ${l.id}: unknown category ${l.cat}`);
+}
+console.log(`${LESSONS.length} lessons checked`);
 const gaps = [...need].filter((x) => EN[x] === undefined);
 gaps.forEach((x) => fail(`no English text for: ${x}`));
 console.log(`${need.size} data strings, ${gaps.length} without English`);
